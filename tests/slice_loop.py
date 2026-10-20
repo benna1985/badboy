@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
-"""A user-style drum loop for the SLICE AUTO test (tests/slice_test.c): two bars at 96 BPM with a
+"""A user-style drum loop for the SLICE AUTO test (tests/slice_test.c): one bar (this fork: a user slot is 40 KiB,
+so the loop is 2.5 s, 27 KB of ADPCM; the original was two bars) at 96 BPM with a
 swing, played by Felucca's generated drums (build/genwav, tools/gen_waves.py) at
 44.1 kHz with a little noise, not on the BREAK's grid or tempo. Writes OUT.wav and OUT.hits (one
 line per onset: seconds).
@@ -27,11 +28,13 @@ HITS = [(0, "KICK", 1.0), (0, "CHAT", 0.4), (2, "CHAT", 0.3), (4, "SNARE", 0.9),
 
 def main(out):
     six = 60 / BPM / 4
-    n = int(32 * six * SR)
+    n = int(16 * six * SR)                    # one bar (a slot holds 3.3 s with its slice record)
     x = [0.0] * n
     rnd = random.Random(7)
     times = {}
     for step, name, gain in HITS:
+        if step >= 16:
+            continue
         t = step * six + (SWING * six if step % 2 else 0)
         sr, s = sio.read_any_wav(GEN / f"D {name}.wav")
         s = sio.resample(s, sr, SR)

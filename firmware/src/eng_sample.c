@@ -38,13 +38,13 @@ static uint32_t pow2_q16(int32_t d16)
 }
 
 /* ---- user sample slots (loaded from the web editor into flash, see web/EDITOR_PROTOCOL.md)
- * 3 slots of 80 KiB at flash 0xA0000.. (Felucca data region), read through the plain XIP
- * window. Slot = header (magic, count, name, data length, CRC32) + up to 16 zones in the
- * smp_zone_t layout (off relative to the slot's data at +512) + IMA ADPCM data. */
+ * 6 slots of 40 KiB at flash 0xA0000..0xDBFFF (Felucca data region; the same 240 KiB as the 3 slots of 80 KiB
+ * this fork replaced), read through the plain XIP window. Slot = header (magic, count, name, data length, CRC32)
+ * + up to 16 zones in the smp_zone_t layout (off relative to the slot's data at +512) + IMA ADPCM data. */
 #include "../hal/fm1_xip.h"   /* relative: hostsim includes this file too */
-#define SMP_USER_SLOTS 3
+#define SMP_USER_SLOTS 6
 #define SMP_USER_BASE 0xA0000u
-#define SMP_USER_SIZE 0x14000u
+#define SMP_USER_SIZE 0xA000u
 #define SMP_USER_DATA 512u
 #define SMP_USER_MAGIC 0x504D5346u                  /* "FSMP" */
 #define SMP_NALL (SMP_NSETS + SMP_USER_SLOTS)
@@ -58,7 +58,7 @@ typedef struct {
 } smp_user_hdr_t;                                   /* 32 + 16 x 28 = 480 B, data at +512 */
 static smp_zone_t usr_zone[SMP_USER_SLOTS][16];     /* RAM copy, off rebased onto SMP_DATA */
 static uint8_t usr_nz[SMP_USER_SLOTS];
-static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3"};
+static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3", "USR4", "USR5", "USR6"};
 
 #ifndef SMP_USER_XIP                                /* host tests: a RAM image of the slots */
 #define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)
@@ -131,7 +131,7 @@ static int smp_set_missing(uint32_t si)
 /* zone index in a voice: < 0x8000 built-in, else 0x8000 | slot << 5 | zone */
 static inline const smp_zone_t *smp_zone(uint32_t zi)
 {
-    return zi < 0x8000u ? &SMP_ZONES[zi] : &usr_zone[(zi >> 5) & 3u][zi & 31u];
+    return zi < 0x8000u ? &SMP_ZONES[zi] : &usr_zone[(zi >> 5) & 7u][zi & 31u];   /* slot 0..5: 3 bits */
 }
 
 /* voice: ph[0] position (samples), ph[1] fraction Q16, s[0] predictor, s[1] step

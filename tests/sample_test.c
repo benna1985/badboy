@@ -11,7 +11,7 @@
  *    piano): a user who installed it keeps it; in USR1 it is valid and renders bit for bit as SET 0 at every key.
  * (Bit identity with 1.1.5.1 itself: tests/golden.txt's SAMPLE / GRAIN PIANO renders are 1.1.5.1's hashes.) */
 #include <stdint.h>
-static uint32_t host_slots[3u * 0x14000u / 4u];          /* USR1..3, as the flash at 0xA0000 */
+static uint32_t host_slots[6u * 0xA000u / 4u];          /* USR1..3, as the flash at 0xA0000 */
 #define SMP_USER_XIP(k) ((const uint8_t *)host_slots + (k) * SMP_USER_SIZE)
 #define main hostsim_main
 #include "hostsim.c"
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
         check("PIANO: SET 0, its aliases 1 and 4 the same zones; FLUTE 2, SAX 3, USR1..3 5..7; 4 presets",
               SMP_NSETS == 5u && str_eq(SMP_SETS[0].name, "PIANO") && SMP_SETS[1].z0 == s->z0 && SMP_SETS[4].z0 == s->z0 &&
               SMP_SETS[1].nz == s->nz && SMP_SETS[4].nz == s->nz && str_eq(SMP_SETS[2].name, "FLUTE") &&
-              str_eq(SMP_SETS[3].name, "SAX") && str_eq(SMP_ALL_NAMES[5], "USR1") && ENG_SAMPLE.edit[0].max == 7 &&
+              str_eq(SMP_SETS[3].name, "SAX") && str_eq(SMP_ALL_NAMES[5], "USR1") && ENG_SAMPLE.edit[0].max == 10 && str_eq(SMP_ALL_NAMES[10], "USR6") &&
               ENG_SAMPLE.npresets == 4u);
         for (i = 0; ok && i < 5u; i++) {
             bytes += (z[i].n + 1u) / 2u;
@@ -233,6 +233,14 @@ int main(int argc, char **argv)
     if (load(path, host_slots, SMP_USER_DATA) != (long)sizeof(smp_user_hdr_t)) {
         printf("sample: no %s (gen_samples.py --user-slot PIANO \"PIANO HD\" ...)\n", path);
         return 1;
+    }
+    if (((const smp_user_hdr_t *)host_slots)->data_len > SMP_USER_SIZE - SMP_USER_DATA) {
+        /* this fork's slots are 40 KiB (6 of them), upstream's 80 KiB (3): the 41 KB PIANO HD file of 1.2 .. 1.4.1 cannot
+         * be installed in one, so this check of the user-slot path against SET 0 does not apply here */
+        printf("sample: PIANO HD (%u B of data) does not fit a %u B slot: skipped (80 KiB slots only)\n",
+               (unsigned)((const smp_user_hdr_t *)host_slots)->data_len, (unsigned)(SMP_USER_SIZE - SMP_USER_DATA));
+        printf("sample: %s\n", fails ? "FAILED" : "all checks ok");
+        return fails != 0;
     }
     snprintf(path, sizeof path, "%s.bin", argv[1]);
     if (load(path, (uint8_t *)host_slots + SMP_USER_DATA, SMP_USER_SIZE - SMP_USER_DATA) <= 0)

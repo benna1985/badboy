@@ -83,11 +83,12 @@ static slc_man_t *slice_edit_begin(uint32_t *k)
     const slc_src_t *s = slice_src(&src, &div);
     slc_man_t *m;
     if (!s || !src || src == SLC_SRC_PIANO) {
-        static const char *const EMPTY[3] = {"USR1 EMPTY", "USR2 EMPTY", "USR3 EMPTY"};
-        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[src - 1u] : "SRC USR1-3 TO EDIT");
+        static const char *const EMPTY[SMP_USER_SLOTS] = {"USR1 EMPTY", "USR2 EMPTY", "USR3 EMPTY",
+                                                          "USR4 EMPTY", "USR5 EMPTY", "USR6 EMPTY"};
+        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[slc_src_slot(src)] : "SRC USR1-6 TO EDIT");
         return 0;
     }
-    *k = src - 1u;
+    *k = slc_src_slot(src);
     if (div != SLC_DIV_MAN && slc_man_of(s)) {       /* the slot has slices set by hand: those, not the grid; this */
         TSEL->p[P_E1] = SLC_DIV_MAN;                 /* touch only shows them (its marker was another one) */
         ui_message("DIV MAN");
@@ -142,7 +143,7 @@ static void slice_knob(uint32_t slot, int32_t steps)
     j = j < n ? (j < m->n ? j : m->n - 1u) : m->n;   /* (a table cut short by SLC_MIN: the nearest) */
     {
         int32_t d = steps * (int32_t)((b - a) / SP_COLS ? (b - a) / SP_COLS : 1u);
-        const slc_src_t *s = slc_get(k + 1u);
+        const slc_src_t *s = slc_get(slc_slot_src(k));
         if (j < m->n)
             slc_man_move(s, m, j, d);
         else
@@ -187,7 +188,7 @@ static void slice_act(uint32_t c)
         j = slc_man_join(m, j);
     } else {
         uint32_t before = m->n;
-        j = slc_man_split(slc_get(k + 1u), m, j);
+        j = slc_man_split(slc_get(slc_slot_src(k)), m, j);
         if (m->n == before) {
             ui_message(before >= SLC_AUTO ? "32 SLICES AT MOST" : "SLICE TOO SHORT");
             return;

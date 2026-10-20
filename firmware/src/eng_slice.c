@@ -37,8 +37,8 @@
  * over one block (0.7 ms).
  * Voice state: ph[0] position (reverse: position + 1), ph[1] fraction Q16, ph[2] slice end (reverse:
  * its start), s[0] predictor (reverse: window start), s[1] step index, s[2] / s[3] previous / current
- * sample, s[4] source | segment << 3 | reverse << 7 | slice << 8 | DIV << 16 (source SLC_SINE: the sine, its
- * phase in ph[0]), s[5] DECAY level Q15, s[6] 0 to prime, 1 playing, 3 fading out, 2 ended, s[7] low-pass. */
+ * sample, s[4] source | segment << 3 | reverse << 7 | slice << 8 | DIV << 16 (SLC_SINE_BIT, bit 24, alone: the
+ * sine, its phase in ph[0]),s[5] DECAY level Q15, s[6] 0 to prime, 1 playing, 3 fading out, 2 ended, s[7] low-pass. */
 #define SLC_GRID 128u                /* grid points: decoder states at k * len / SLC_GRID */
 #define SLC_GRID_LOG2 7
 #define SLC_AUTO 32u                 /* AUTO slices at most */
@@ -64,10 +64,15 @@ static slc_src_t slc_usr[SMP_USER_SLOTS];
 typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
 ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
-static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"};
+/* (this fork: USR4..USR6 appended after PIANO, as 5..7; user slot k <-> source slc_slot_src(k)) */
+static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO", "USR4", "USR5", "USR6"};
 #define SLC_SRC_PIANO 4u
-#define SLC_NSRC 5
-#define SLC_SINE 7u                  /* a voice's source when it has no material: the sine */
+#define SLC_NSRC 8
+#define SLC_SINE_BIT (1u << 24)      /* in a voice's s[4]: no material, the sine (the source field is then unused) */
+/* user slot k (0..5) -> its SRC number: USR1..3 are 1..3, USR4..6 are 5..7 (4 is PIANO) */
+static inline uint32_t slc_slot_src(uint32_t k) { return k < 3u ? k + 1u : k + 2u; }
+/* the user slot of SRC number src (1..3, 5..7; not BREAK 0, not PIANO 4) */
+static inline uint32_t slc_src_slot(uint32_t src) { return src < SLC_SRC_PIANO ? src - 1u : src - 2u; }
 static const char *const N_SLC_DIV[] = {"4", "8", "16", "32", "AUTO", "MAN"};
 static const char *const N_SLC_MODE[] = {"ONE", "GATE", "LOOP"};
 static const char *const N_SLC_REV[] = {"OFF", "ON"};
@@ -91,14 +96,15 @@ static uint8_t slc_man_save;                     /* bit k: slot k's slices chang
 
 /* the SRC of a part's sound (0..4: a stored value out of range reads as the nearest) */
 static uint32_t slc_src_of(const int16_t *p) { return (uint32_t)clamp(p[P_E0], 0, SLC_NSRC - 1); }
-/* source 0 = BREAK, 1..3 = USR1..3, 4 = PIANO; 0 = no material (an empty or erased slot, no PIANO in the build) */
+/* source 0 = BREAK, 1..3 = USR1..3, 4 = PIANO, 5..7 = USR4..6; 0 = no material (an empty or erased slot, no PIANO
+ * in the build) */
 static const slc_src_t *slc_get(uint32_t src)
 {
     if (!src)
         return SLC_BREAK.len ? &SLC_BREAK : 0;
     if (src == SLC_SRC_PIANO)
         return SLC_PIANO.len ? &SLC_PIANO : 0;
-    src--;
+    src = slc_src_slot(src);                              /* the user slot */
     return src < SMP_USER_SLOTS && usr_nz[src] && slc_usr[src].len ? &slc_usr[src] : 0;
 }
 
@@ -314,7 +320,7 @@ static uint32_t slc_state_at(const slc_src_t *s, uint32_t pos)
  * SLC_MIN apart and from the end); 0 = no material in the slot */
 static slc_man_t *slc_man_begin(uint32_t k)
 {
-    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(k + 1u) : 0;
+    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(slc_slot_src(k)) : 0;
     const slc_man_t *cur;
     slc_man_t *m;
     uint32_t i;
@@ -409,7 +415,7 @@ static uint32_t slc_man_join(slc_man_t *m, uint32_t j)
  * not fit its material (nothing changes). Junk is refused: no sums that can wrap */
 static int slc_man_restore(uint32_t k, uint32_t n, uint32_t end, const uint32_t *pos)
 {
-    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(k + 1u) : 0;
+    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(slc_slot_src(k)) : 0;
     slc_man_t *m;
     uint32_t i, e;
     if (!s || !n || n > SLC_AUTO || end > s->len)
@@ -449,7 +455,7 @@ static void slice_note_on(track_t *t, voice_t *v)
     v->s[7] = 0;
     v->env_out = 0;                                     /* a new slice fades in over one block */
     if (!s) {                                           /* no material: the sine (from phase 0: no click) */
-        v->s[4] = (int32_t)SLC_SINE;
+        v->s[4] = (int32_t)SLC_SINE_BIT;
         v->s[6] = 1;
         v->ph[0] = 0;
         return;
@@ -538,7 +544,7 @@ static inline int slc_rev(const slc_src_t *s, voice_t *v, int16_t *rb, int loop,
 static int32_t slice_amp(track_t *t, voice_t *v, int32_t adsr)
 {
     const int16_t *p = t->p;
-    if (p[P_E4] == SLC_ONE && v->stage == 3u && ((uint32_t)v->s[4] & 7u) != SLC_SINE)
+    if (p[P_E4] == SLC_ONE && v->stage == 3u && !((uint32_t)v->s[4] & SLC_SINE_BIT))
         v->stage = 2;                                   /* ONE: the slice plays to its end (the sine has none) */
     if (p[P_E6] < 127) {
         v->s[5] -= mulq16(v->s[5], ENV_EXP[p[P_E6] & 127]);
@@ -554,10 +560,10 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
     uint32_t pk = (uint32_t)v->s[4], i, frac = v->ph[1], rev = (pk >> 7) & 1u, stepq, rem;
     int32_t lp = 4000 + ((clamp((p[P_E7] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15), x;
     int loop = p[P_E4] == SLC_LOOP && v->gate;
-    const slc_src_t *s = v->s[6] == 2 || (pk & 7u) == SLC_SINE ? 0 : slc_get(pk & 7u);
+    const slc_src_t *s = v->s[6] == 2 || (pk & SLC_SINE_BIT) ? 0 : slc_get(pk & 7u);
     int16_t *rb = slc_rb(t, v);
     slc_dec_t d;
-    if ((pk & 7u) == SLC_SINE && v->s[6] != 2) {        /* no material: the sine at the key's pitch + PTCH */
+    if ((pk & SLC_SINE_BIT) && v->s[6] != 2) {          /* no material: the sine at the key's pitch + PTCH */
         smp_sine(out, n, m, p[P_E3] * 16, lp, &v->ph[0], &v->s[7]);
         return;
     }

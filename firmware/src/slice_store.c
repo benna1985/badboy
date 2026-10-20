@@ -39,7 +39,7 @@ static int slc_rec_room(uint32_t k)
 /* what slot k's record should hold now (its MAN slices in use, or none: n = 0) */
 static void slc_rec_make(uint32_t k, slc_rec_t *r)
 {
-    const slc_src_t *s = slc_get(k + 1u);
+    const slc_src_t *s = slc_get(slc_slot_src(k));
     const slc_man_t *m = s ? slc_man_of(s) : 0;
     memset(r, 0, sizeof *r);
     r->magic = SLC_REC_MAGIC;
@@ -57,7 +57,7 @@ static void slc_rec_make(uint32_t k, slc_rec_t *r)
 static void slc_store_load(uint32_t k)
 {
     const slc_rec_t *r = (const slc_rec_t *)(smp_user_xip(k) + SLC_REC_OFF);
-    const slc_src_t *s = slc_get(k + 1u);
+    const slc_src_t *s = slc_get(slc_slot_src(k));
     slc_rec_t c;
     if (!s || !slc_rec_room(k))
         return;

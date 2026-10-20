@@ -21,7 +21,7 @@
  *    page), read back at a scan, kept for the same sample only, junk and torn writes ignored, a long sample. */
 #include <stdarg.h>
 #include <stdint.h>
-static uint32_t host_slots[3u * 0x14000u / 4u];          /* USR1..3, as the flash at 0xA0000 */
+static uint32_t host_slots[6u * 0xA000u / 4u];          /* USR1..3, as the flash at 0xA0000 */
 #define SMP_USER_XIP(k) ((const uint8_t *)host_slots + (k) * SMP_USER_SIZE)
 #define main hostsim_main
 #include "hostsim.c"
@@ -277,7 +277,7 @@ static sine_run_t sine_run(uint32_t eng, int16_t src, uint32_t note)
     t->p[P_REL] = 10;
     trk_note_on(t, note, 100);
     v = voice_of(t, note);
-    r.sine = v && (eng == SLC_ENG ? ((uint32_t)v->s[4] & 7u) == SLC_SINE : eng == 8u ? v->s[0] == GR_SINE : v->s[6] == 2);
+    r.sine = v && (eng == SLC_ENG ? ((uint32_t)v->s[4] & SLC_SINE_BIT) != 0u : eng == 8u ? v->s[0] == GR_SINE : v->s[6] == 2);
     for (k = 0; k < FS / 2u / CTL; k++) {
         int32_t o[2 * CTL];
         mix_block(o, CTL);
@@ -395,6 +395,22 @@ int main(int argc, char **argv)
         printf(" %.1f", hits[i] * 1000.0 / 22050.0);
     printf("\n");
     check("USR2 / USR3: empty, no material", !slc_get(2) && !slc_get(3), 0);
+    check("USR4 / USR5 / USR6 (SRC 5 / 6 / 7): empty, no material", !slc_get(5) && !slc_get(6) && !slc_get(7), 0);
+    {   /* the same sample in the last slot (USR6, SRC 7): found there and only there, as slot 5, PIANO untouched */
+        uint8_t *img = (uint8_t *)host_slots;
+        const slc_src_t *s7, *s4 = slc_get(SLC_SRC_PIANO);
+        memcpy(img + 5u * SMP_USER_SIZE, img, SMP_USER_SIZE);
+        smp_user_scan(5);
+        s7 = slc_get(7);
+        check("USR6 (SRC 7): the sample loaded in slot 5 is found, as long as USR1's",
+              s7 == &slc_usr[5] && s7->len == slc_usr[0].len && usr_nz[5] == usr_nz[0] && slc_slot_of(s7) == 5u, 0);
+        check("USR6: table == decoder states", !table_check(&slc_usr[5]), 0);
+        check("USR6 filled: SRC 5 / 6 (USR4, USR5) still empty, PIANO and USR1 unchanged",
+              !slc_get(5) && !slc_get(6) && slc_get(SLC_SRC_PIANO) == s4 && slc_get(1) == &slc_usr[0], 0);
+        memset(img + 5u * SMP_USER_SIZE, 0xFF, SMP_USER_SIZE);          /* erased: as a blank flash */
+        smp_user_scan(5);
+        check("USR6 erased: empty again", !slc_get(7) && !usr_nz[5], 0);
+    }
 
     /* 3 */
     for (bad = 0, i = 0; i < 16u; i++)
@@ -439,7 +455,7 @@ int main(int argc, char **argv)
         ok &= (v = voice_of(t, 72)) && slice_of(v) == 12u % SLC_BREAK.nauto && v->ph[0] == SLC_BREAK.apos[12u % SLC_BREAK.nauto];
         t->p[P_E0] = 2;                                    /* USR2: empty -> the sine */
         trk_note_on(t, 61, 100);
-        ok &= (v = voice_of(t, 61)) && ((uint32_t)v->s[4] & 7u) == SLC_SINE;
+        ok &= (v = voice_of(t, 61)) && ((uint32_t)v->s[4] & SLC_SINE_BIT) != 0u;
         t->p[P_E0] = 1;                                    /* USR1 */
         trk_note_on(t, 63, 100);
         ok &= (v = voice_of(t, 63)) && ((uint32_t)v->s[4] & 7u) == 1u && v->ph[0] == slc_usr[0].apos[3];
@@ -852,9 +868,16 @@ int main(int argc, char **argv)
 #else
     check("PIANO (SRC 4): none in a build without the CC0 samples", !slc_get(SLC_SRC_PIANO), 0);
 #endif
-    check("SRC: BREAK USR1 USR2 USR3 PIANO (append-only: 1.0.3's numbers kept)",
-          ENG_SLICE.edit[0].max == 4 && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
-          str_eq(N_SLC_SRC[3], "USR3") && str_eq(N_SLC_SRC[4], "PIANO") && SLC_BREAK.len != 0u, 0);
+    check("SRC: BREAK USR1 USR2 USR3 PIANO USR4 USR5 USR6 (append-only: 1.0.3's numbers kept)",
+          ENG_SLICE.edit[0].max == 7 && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
+          str_eq(N_SLC_SRC[3], "USR3") && str_eq(N_SLC_SRC[4], "PIANO") && str_eq(N_SLC_SRC[5], "USR4") &&
+          str_eq(N_SLC_SRC[7], "USR6") && SLC_BREAK.len != 0u, 0);
+    {   /* slot <-> SRC: USR1..3 are 1..3, USR4..6 are 5..7 (4 is PIANO) */
+        uint32_t k, ok = 1;
+        for (k = 0; k < SMP_USER_SLOTS; k++)
+            ok &= slc_src_slot(slc_slot_src(k)) == k && slc_slot_src(k) != SLC_SRC_PIANO && slc_slot_src(k) != 0u;
+        check("slot <-> SRC mapping: 6 slots, round trip, never BREAK or PIANO", ok && SMP_USER_SLOTS == 6, 0);
+    }
     sine_ok("SLICE on an empty USR2: A4", sine_run(SLC_ENG, 2, 69), 440.0);
     sine_ok("SLICE on an empty USR2: A3", sine_run(SLC_ENG, 2, 57), 220.0);
     sine_ok("SAMPLE on an empty USR2: A4", sine_run(4u, (int16_t)(SMP_NSETS + 1), 69), 440.0);
