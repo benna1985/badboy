@@ -802,6 +802,19 @@ moved up by seven). Firmware 1.2 .. 1.4 refuses a FUN10 of 111 (more parameters 
 backup PUT of one answers rc 1); user presets of 111 load there by count (the seven left out). Library files of 104 map
 by label: the INSERT, TYPE and ESYNC unset.
 
+## Sequencer ROLL (113 parameters)
+
+Two track parameters before the engine parameters, after `ESYNC`: P_COUNT 113, P_E0 105 (take both from `INFO` as always).
+No new command; `DESC` describes them. Projects stay FUN10 (113 at byte 66; 8 bytes to spare, room for 2 more); a FUN10 of
+111 loads by count (ROLL OFF, RPIT 0), and older firmware refuses one of 113 as it does any with more parameters than its own.
+
+| id | label | values |
+| --- | --- | --- |
+| 103 | `ROLL` | enum OFF 1/8 1/16 1/32 1/64 1/8T 1/16T 1/32T, default OFF. The sequencer plays a NOTE step as repeats at this rate: as many as fit the step's (swung) length, at least its RATCH, at most 16. A rate no faster than the step is the step as before (OFF: every pattern plays as it did). On the device: SEQ > ROLL |
+| 104 | `RPIT` | -24..+24 semitones, default 0. The pitch change from the first repeat to the last, in equal steps: pitched engines transpose each repeat, SLICE plays it faster / slower (varispeed) |
+
+Both can be recorded as motion and set as parameter locks on a step (a roll on one step only, with its own pitch ramp).
+
 ## v7: full backup (65-67)
 
 INFO advertises `42 01 caps`: bit 0 = `BACKUP_LIST` / `BACKUP_GET` (read), bit 1 = `BACKUP_PUT` (restore);

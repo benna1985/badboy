@@ -69,6 +69,7 @@ enum {                          /* per-track parameters */
     P_ITYPE, P_IA, P_IB, P_IC, P_IMIX,         /* 1.5 (#78, #177): the INSERT, its TYPE, three values and MIX (fx.c) */
     P_FTYPE,                                   /* 1.5 (#104): ANALOG's filter TYPE, LP (as before) / BP / HP (eng_analog.c) */
     P_ESYNC,                                   /* 1.5 (#175): ENV SYNC: ATK DEC REL as note values of the tempo (voice.c) */
+    P_ROLL, P_RPIT,                            /* ROLL: repeat rate of a sequenced note (up to 1/64), and the pitch ramp over the repeats (seq.c) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -310,9 +311,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[1];           /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[11];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[14];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[8];           /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
@@ -325,6 +326,8 @@ typedef struct track {
     uint8_t m_vel, m_key, m_vi;  /* the latest note-on: velocity, note, voice index (per-block destinations) */
     uint8_t sp_alt;              /* SPREAD: the side the next voice starts on (alternating, voice.c voice_start) */
     int16_t m_rnd;               /* .. its RAND */
+    int16_t roll_next;           /* ROLL: the pitch offset (1/16 semitones) the next note-on starts with (seq.c seq_step) */
+    int16_t roll16[NVOICE];      /* .. and the one each voice plays with (voice.c voice_start): the repeats' pitch ramp */
     int32_t m_env;               /* the amp envelope of voice m_vi, last block (Q15) */
 } track_t;
 /* the audio ISR indexes trk[] with a multiply by a small immediate and a shift while the size is a multiple of 16; 1.5's

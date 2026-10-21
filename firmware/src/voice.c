@@ -302,6 +302,7 @@ static void voice_start(track_t *t, voice_t *v, uint32_t note, uint32_t vel, int
     v->stage = 1;
     v->age = ++vage;
     v->pitch16 = (int32_t)note * 16;
+    t->roll16[v - t->v] = t->roll_next;                 /* ROLL: the repeat's pitch offset (seq.c), 0 for every other note */
     v->mvel = t->m_vel;                                 /* mod.c: the note's VEL and RAND */
     v->mrnd = t->m_rnd;
     t->m_vi = (uint8_t)(v - t->v);
@@ -357,6 +358,7 @@ static void mono_play(track_t *t, uint32_t note, uint32_t vel, int retrig, int g
         } else {                                            /* legato: new pitch, same envelope */
             v->note = (uint8_t)note;
             v->pitch16 = (int32_t)note * 16;
+            t->roll16[v - t->v] = t->roll_next;
             v->mvel = t->m_vel;
             v->mrnd = t->m_rnd;
             if (vel > v->vel && nv == 1u)
@@ -739,7 +741,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
         }
         if (!env && !m.amp0 && v->stage == 2 && !e->sampled)
             continue;                                   /* held at a silent sustain (SUS 0): nothing to render */
-        pitch = v->pitch_cur + tune + bend16 + ((lfo * p[P_LD_PIT] * 3) >> 15) + ((m.envq15 * p[P_ED_PIT] * 3) >> 15);
+        pitch = v->pitch_cur + t->roll16[v - t->v] + tune + bend16 + ((lfo * p[P_LD_PIT] * 3) >> 15) + ((m.envq15 * p[P_ED_PIT] * 3) >> 15);
         m.pitch16 = clamp(pitch, 0, 2047);
         m.inc = pitch_inc(m.pitch16);
         m.fine = v->fine + tune_fine + bend_fine;

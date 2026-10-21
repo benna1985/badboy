@@ -20,6 +20,7 @@ static const char *const N_SCALE[] = {"CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", 
 static const char *const N_ONOFF[] = {"OFF", "ON"};
 /* ANALOG's filter TYPE (1.5, #104; eng_analog.c): the SVF's low-pass (as always), band-pass, high-pass output */
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
+static const char *const N_ROLL[] = {"OFF", "1/8", "1/16", "1/32", "1/64", "1/8T", "1/16T", "1/32T"};
 /* ENV SYNC (1.5, #175; voice.c esync_coef): ATK DEC REL as note values of the tempo, shortest first. 0..127 split
  * evenly over these 25 (param_format's F_INT name list: value v is ESYNC_NAMES[v * 25 / 128]); ESYNC_UNITS: each in
  * 1/384 of a bar of 4/4 (a quarter 96), 0 = the shortest time ATK / DEC / REL 0 has. 0-terminated (param_format) */
@@ -165,6 +166,8 @@ static const param_desc_t TP[P_COUNT] = {
     [P_IMIX] = PD("MIX", F_PCT, 0, 127, 127),
     [P_FTYPE] = PE("TYPE", N_FTYPE, 0),           /* 1.5 (#104): ANALOG's filter, LP = as before (eng_analog.c) */
     [P_ESYNC] = PE("ESYNC", N_ONOFF, 0),          /* 1.5 (#175): OFF = ATK DEC REL in ms, as before (voice.c esync) */
+    [P_ROLL] = PE("ROLL", N_ROLL, 0),             /* OFF = the steps as before; else a step plays repeats at this rate (seq.c seq_hits) */
+    [P_RPIT] = PD("RPIT", F_SEMI, -24, 24, 0),    /* the pitch change from the first repeat to the last (voice.c roll16) */
 };
 
 /* the INSERT's A B C as its TYPE means them (TP's ranges and defaults): the drives DRIVE TONE LEVEL, CRUSH BITS RATE
@@ -493,6 +496,7 @@ static const page_t PAGES[] = {
                                                              * (ui.c detail_on, ui_input.c sd_turn) */
     {"AUTOMATION", FAM_SEQ, SC_TRACK, GR_EVENTS, {0xFF, 0xFF, 0xFF, 0xFF}},  /* the locks, events, CHANCE and RATCH as a
                                                                              * list, PLAY and CLEAR (ui_events.c) */
+    {"ROLL", FAM_SEQ, SC_TRACK, GR_NONE, {P_ROLL, P_RPIT, 0xFF, 0xFF}},   /* repeats up to 1/64 + a pitch ramp (seq.c) */
     /* HOME's pages (1.2): HOME tapped on HOME the MIXER (up to 1.1.5 GLO's; LEVEL PAN REV MUTE), again CLOCK (up to 1.1.5
      * GLO > GLOBAL; its TUNE is MENU > AUDIO's now), again HOME (ui.c home_tap) */
     {"MIXER", FAM_TRK, SC_TRK, GR_TRK, {0, 1, 2, 3}},

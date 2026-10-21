@@ -911,6 +911,7 @@ static int seq_miss(const track_t *t, const step_t *s, uint32_t idx)
         return seq_cond_miss(t, s, idx);
     return step_chance(s) < 100u && rng() % 100u >= step_chance(s);
 }
+static uint32_t seq_hits(const track_t *t, const step_t *s, uint32_t period, uint32_t idx);   /* (ROLL, below) */
 #define SEQ_REP (1u << 16)
 #define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
 #define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
@@ -921,7 +922,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t slide_in = t->seq_hold && t->seq_n && !(skip & SEQ_REP);
     uint32_t len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u;
     uint32_t next_tie = seq_steps(t)[(idx + 1u) % len].time == ST_TIE;
-    uint32_t hits = step_ratchet(s);
+    uint32_t hits = seq_hits(t, s, period, idx);
     uint8_t nn[4 + NLANE], vv[4 + NLANE];           /* the notes it plays: its notes, then its hits */
     uint32_t m = 0, sk = 0;
     /* QNT SEQ: the step's notes (not the lane hits) snap to the scale as they play; never on a drum kit, the slices
@@ -977,9 +978,13 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     t->slide_glide = (uint8_t)slide_in;
     if (!slide_in)
         seq_release(t);
+    /* ROLL: part k of the n repeats starts RPIT x k / (n - 1) semitones from the first (voice.c roll16) */
+    t->roll_next = hits > 1u && t->p[P_RPIT] ?
+        (int16_t)((int32_t)t->p[P_RPIT] * 16 * (int32_t)(hits - 1u - t->rat_left) / (int32_t)(hits - 1u)) : 0;
     for (i = 0; i < m; i++)
         if (!((sk >> i) & 1u))
             trk_note_on(t, nn[i], vv[i]);
+    t->roll_next = 0;
     if (slide_in)                                   /* release what is not held over */
         for (i = 0; i < t->seq_n; i++) {
             for (j = 0; j < m && nn[j] != t->seq_notes[i]; j++)
@@ -1023,7 +1028,7 @@ static __attribute__((noinline)) void seq_audition(void)
 static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
 {
     const step_t *s = &seq_steps(t)[t->seq_idx];
-    uint32_t hits = step_ratchet(s);
+    uint32_t hits = seq_hits(t, s, period, t->seq_idx);
     if (t->rat_left >= hits) {
         t->rat_left = 0;
         return;
@@ -1032,6 +1037,22 @@ static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
         return;
     t->rat_left--;
     seq_step(t, s, t->seq_idx, period, SEQ_REP);
+}
+
+/* ROLL (P_ROLL, P_RPIT): the parts a NOTE step plays: its RATCH, or as many repeats of the roll rate as fit its swung
+ * length when that is more (a rate no faster than the step: one part, the step as before). At most 16. The rate is
+ * a note value of the quarter (1/8 1/16 1/32 1/64, then the triplets 1/8T 1/16T 1/32T). Not inlined: a divide, once
+ * a step and once a part, off the audio ISR's loop */
+static const uint8_t ROLL_DEN[8] = {0, 2, 4, 8, 16, 3, 6, 12};
+static __attribute__((noinline)) uint32_t seq_hits(const track_t *t, const step_t *s, uint32_t period, uint32_t idx)
+{
+    uint32_t h = step_ratchet(s), r = (uint32_t)t->p[P_ROLL] & 7u, q, n;
+    if (!r || s->time != ST_NOTE)
+        return h;
+    q = beat_samples();
+    n = (step_samples(t, period, idx) * ROLL_DEN[r] + q / 2u + q / 8u) / (q ? q : 1u);   /* (a half rounds up: 1/16T on a 1/16 is 1.5) */
+    n = n > 16u ? 16u : n;
+    return n > h ? n : h;
 }
 
 /* the nudge of step s in 1/NUDGE_DIV of the step (NUDGE, core.h) when it plays off its start: the track's QUANTIZE OFF,
