@@ -8,7 +8,7 @@
  * (a zone that shares its data with an earlier one is skipped), or PIANO (SRC 4, since 1.0.4: one
  * note, the SAMPLE engine's PIANO zone of middle C, played from its data in SMP_DATA: no copy).
  * A source with no material (an empty or invalid slot; PIANO in a build without the CC0 samples)
- * plays a plain sine at the key's pitch (+ PTCH) instead, through DCAY, TONE and the ADSR (MODE ONE
+ * plays a plain sine at the key's pitch (+ PTCH) instead, through DCAY, the fixed low-pass and the ADSR (MODE ONE
  * acts as GATE there: no slice end), and the UI says so (ui_input.c sample_notice).
  *
  * Slices (DIV): 4 / 8 / 16 / 32 equal ones, AUTO: one per onset, or MAN: set by hand on the EDIT family's SLICES
@@ -25,15 +25,21 @@
  * rose (1.5..3 ms of pre-roll, never after the hit). RAM: 3 x 972 B of tables, 3 KiB of reverse
  * windows; a full 7 s slot scans in ~0.3 M decoder steps.
  *
- * Playing: note n plays slice (n - 60 - ROOT + START) mod the slice count (the keys: the lowest
+ * Playing: note n plays slice (n - 60 - ROOT) mod the slice count (the keys: the lowest
  * key is slice 0, seq.c kb_map). Slices play at the source rate times PITCH (varispeed: faster is
  * higher). MODE: ONE plays the slice to its end (a note-off does not stop it), GATE until the
  * note-off (then the ADSR release) or the slice end, LOOP repeats the slice while the note is held.
  * REV plays a slice backwards: windows of 64 samples are decoded forwards from the nearest
  * checkpoint (grid point or the slice start) into the voice's own buffer and read from the top
  * down; it costs about (len / 128) / 128 extra decodes per source sample (BREAK: ~3; a full
- * 7 s user slot: ~10). DECAY: an exponential fade per slice (127 = none). TONE: a gentle low-pass
- * (SAMPLE's CUT). The last ~1.5 ms of a slice fade out (no click at the cut), a new slice fades in
+ * 7 s user slot: ~10). DECAY: an exponential fade per slice (127 = none). A gentle fixed low-pass follows (what
+ * TONE 127 was; the cutoff modulation still closes it). Amigo-style (this fork): BITS keeps 16 .. 1 bits of the
+ * sample; below 16 the interpolation between source samples is dropped too (nearest sample: the aliasing of a
+ * Paula channel) before the low-pass. STRCH (STRETCH, 0 = off, else 1 .. 127: the sample's timeline runs at
+ * 2^((STRCH - 64) / 32) of its natural speed, 0.26 .. 3.9x, whatever the pitch (PTCH, bend, glide)) is an Akai-style
+ * time stretch: the voice plays 1024-sample grains at its pitch, and at the end of each the read position jumps to
+ * where the timeline is (the decoder is entered at the nearest grid checkpoint, slc_seek); 16 samples of dip on
+ * both sides of a jump keep it from clicking and are the grit of the sound. Not with REV. The last ~1.5 ms of a slice fade out (no click at the cut), a new slice fades in
  * over one block (0.7 ms).
  * Voice state: ph[0] position (reverse: position + 1), ph[1] fraction Q16, ph[2] slice end (reverse:
  * its start), s[0] predictor (reverse: window start), s[1] step index, s[2] / s[3] previous / current
@@ -62,7 +68,20 @@ static const slc_src_t SLC_BREAK = SLC_BREAK_INIT;
 static const slc_src_t SLC_PIANO = SLC_PIANO_INIT;
 static slc_src_t slc_usr[SMP_USER_SLOTS];
 typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
-ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
+#define SLC_GRAIN 1024u              /* STRETCH: output samples per grain (23 ms) */
+#define SLC_DIP 16u                  /* ... and the samples of dip either side of a jump */
+typedef struct {                     /* STRETCH, per voice (after the reverse windows in the part's eng_mem) */
+    int32_t tpos;                    /* the timeline: source sample ... */
+    uint32_t tfrac;                  /* ... and its fraction, Q16 */
+    int32_t gl;                      /* output samples left in the grain */
+    uint32_t glen;                   /* the length of the grain playing (the first is DIP short) */
+    uint32_t starved;                /* 1: the read position reached the slice's end inside the grain: silence till the next jump */
+} slc_str_t;
+typedef struct {
+    slc_rbuf_t rb;
+    slc_str_t st[NVOICE];
+} slc_mem_t;
+ENG_MEM_FITS("SLICE", sizeof(slc_mem_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
 /* (this fork: USR4..USR6 appended after PIANO, as 5..7; user slot k <-> source slc_slot_src(k)) */
 static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO", "USR4", "USR5", "USR6"};
@@ -73,6 +92,8 @@ static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"
 static inline uint32_t slc_slot_src(uint32_t k) { return k < 3u ? k + 1u : k + 2u; }
 /* the user slot of SRC number src (1..3, 5..7; not BREAK 0, not PIANO 4) */
 static inline uint32_t slc_src_slot(uint32_t src) { return src < SLC_SRC_PIANO ? src - 1u : src - 2u; }
+static const char *const N_SLC_BITS[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"};
+#define SLC_BITS_MAX 15              /* the BITS value of 16 bits (clean); a stored 127 (TONE's default) reads as it */
 static const char *const N_SLC_DIV[] = {"4", "8", "16", "32", "AUTO", "MAN"};
 static const char *const N_SLC_MODE[] = {"ONE", "GATE", "LOOP"};
 static const char *const N_SLC_REV[] = {"OFF", "ON"};
@@ -174,10 +195,10 @@ static uint32_t slc_count(const slc_src_t *s, uint32_t div)
     const slc_man_t *m = div == SLC_DIV_MAN ? slc_man_of(s) : 0;
     return div < SLC_DIV_AUTO ? 4u << div : m ? m->n : s->nauto;
 }
-/* the slice a note plays (n slices): note - C4 - ROOT + START, mod n */
+/* the slice a note plays (n slices): note - C4 - ROOT, mod n */
 static uint32_t slc_note_slice(const int16_t *p, uint32_t note, uint32_t n)
 {
-    int32_t j = ((int32_t)note - SLC_BASE - p[P_ROOT] + p[P_E2]) % (int32_t)n;
+    int32_t j = ((int32_t)note - SLC_BASE - p[P_ROOT]) % (int32_t)n;
     return (uint32_t)(j < 0 ? j + (int32_t)n : j);
 }
 
@@ -206,6 +227,26 @@ static void slc_bounds_v(const slc_src_t *s, const voice_t *v, uint32_t *a, uint
 {
     uint32_t pk = (uint32_t)v->s[4];
     slc_bounds(s, (pk >> 16) & 7u, (pk >> 8) & 63u, a, b, st);
+}
+
+/* the decoder at source sample pos: from where it is when that is near behind, else from the nearest checkpoint at or
+ * below pos (a grid point), then forward */
+static void slc_seek(const slc_src_t *s, slc_dec_t *d, uint32_t pos)
+{
+    uint32_t k = (pos << SLC_GRID_LOG2) / s->len;
+    if (pos >= d->pos && pos - d->pos <= (s->len >> SLC_GRID_LOG2) + 1u) {
+        while (d->pos < pos)
+            slc_dec_next(s, d);
+        return;
+    }
+    k = k < SLC_GRID ? k : SLC_GRID - 1u;
+    while (k + 1u < SLC_GRID && slc_gpos(s, k + 1u) <= pos)
+        k++;
+    while (k && slc_gpos(s, k) > pos)
+        k--;
+    slc_dec_at(d, slc_gpos(s, k), s->grid[k]);
+    while (d->pos < pos)
+        slc_dec_next(s, d);
 }
 
 /* ---- the slice table of a user slot (main loop) */
@@ -441,6 +482,11 @@ static int16_t *slc_rb(track_t *t, voice_t *v)
     uint32_t p = (uint32_t)(t - trk), i = (uint32_t)(v - t->v);
     return p < NPART && i < NVOICE ? (*(slc_rbuf_t *)ENG_MEM(p))[i] : 0;
 }
+static slc_str_t *slc_stv(const track_t *t, const voice_t *v)
+{
+    uint32_t p = (uint32_t)(t - trk), i = (uint32_t)(v - t->v);
+    return p < NPART && i < NVOICE ? &((slc_mem_t *)ENG_MEM(p))->st[i] : 0;
+}
 
 static void slice_note_on(track_t *t, voice_t *v)
 {
@@ -466,6 +512,16 @@ static void slice_note_on(track_t *t, voice_t *v)
         return;
     v->s[4] = (int32_t)(src | (st >> 24) << 3 | rev << 7 | j << 8 | div << 16);
     v->s[6] = 0;
+    {
+        slc_str_t *k = slc_stv(t, v);               /* STRETCH: the timeline starts at the slice start */
+        if (k) {
+            k->tpos = (int32_t)a;
+            k->tfrac = 0;
+            k->starved = 0;
+            k->glen = SLC_GRAIN - SLC_DIP;          /* (the first grain has no dip in front) */
+            k->gl = (int32_t)k->glen;
+        }
+    }
     if (rev) {
         v->ph[0] = b;
         v->ph[2] = a;
@@ -558,8 +614,12 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
 {
     const int16_t *p = t->p;
     uint32_t pk = (uint32_t)v->s[4], i, frac = v->ph[1], rev = (pk >> 7) & 1u, stepq, rem;
-    int32_t lp = 4000 + ((clamp((p[P_E7] << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15), x;
+    int32_t lp = 4000 + ((clamp((127 << 8) + m->cutoff, 0, 127 << 8) * 28767) >> 15), x;   /* (TONE 127 was this) */
     int loop = p[P_E4] == SLC_LOOP && v->gate;
+    uint32_t sh = 15u - (uint32_t)clamp(p[P_E7], 0, SLC_BITS_MAX);    /* BITS: bits dropped; below 16 bits: no interpolation */
+    uint32_t strv = (uint32_t)clamp(p[P_E2], 0, 127), tadv = 0;
+    slc_str_t *k = strv && !rev ? slc_stv(t, v) : 0;                   /* STRETCH (not with REV) */
+    uint32_t lim = 0;
     const slc_src_t *s = v->s[6] == 2 || (pk & SLC_SINE_BIT) ? 0 : slc_get(pk & 7u);
     int16_t *rb = slc_rb(t, v);
     slc_dec_t d;
@@ -584,29 +644,89 @@ static void slice_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         v->s[3] = x;
         v->s[6] = 1;
     }
+    if (k) {                                            /* the timeline's speed, Q16 source samples per output sample */
+        uint32_t nat = (s->rate >> 8) << 8;
+        tadv = ((nat >> 4) * (pow2_q16(6 * ((int32_t)strv - 64)) >> 4)) >> 8;
+        lim = ((stepq * SLC_DIP) >> 16) + 2u;            /* source samples the dip before the end of the data spans */
+    }
     rem = rev ? v->ph[0] - v->ph[2] : v->ph[2] - d.pos;
-    if (v->s[6] == 1 && !loop && rem < ((stepq * 3u * n) >> 16))
+    if (k)
+        rem = (uint32_t)k->tpos < v->ph[2] ? v->ph[2] - (uint32_t)k->tpos : 0u;
+    if (v->s[6] == 1 && !loop && rem < (((k ? tadv : stepq) * 3u * n) >> 16))
         v->s[6] = 3;                                    /* the next block fades to 0 (slice_amp) */
     for (i = 0; i < n; i++) {
         int32_t y;
+        uint32_t dip = SLC_DIP;
+        if (k) {
+            if (--k->gl <= 0) {                         /* the end of a grain: the read position goes to the timeline */
+                uint32_t adv = k->glen * tadv + k->tfrac, tgt;
+                k->tpos += (int32_t)(adv >> 16);
+                k->tfrac = adv & 0xFFFFu;
+                k->glen = SLC_GRAIN;
+                k->gl = (int32_t)SLC_GRAIN;
+                k->starved = 0;
+                tgt = (uint32_t)k->tpos;
+                if (tgt >= v->ph[2]) {                  /* past the slice's end */
+                    uint32_t a, b, st;
+                    if (!loop) {
+                        v->s[6] = 2;
+                        v->s[3] = 0;
+                        break;
+                    }
+                    slc_bounds_v(s, v, &a, &b, &st);    /* LOOP: round to the start again */
+                    tgt = b > a ? a + (tgt - b) % (b - a) : a;
+                    k->tpos = (int32_t)tgt;
+                }
+                slc_seek(s, &d, tgt);
+                v->s[2] = slc_dec_next(s, &d);
+                v->s[3] = d.pos < v->ph[2] ? slc_dec_next(s, &d) : 0;
+            }
+            dip = (uint32_t)k->gl < SLC_DIP ? (uint32_t)k->gl : (SLC_GRAIN - (uint32_t)k->gl) < SLC_DIP ?
+                  SLC_GRAIN - (uint32_t)k->gl : SLC_DIP;
+            if (!loop && d.pos <= v->ph[2] && v->ph[2] - d.pos < lim) {  /* the data runs out soon: ramp down to it (0 at the end) */
+                uint32_t e = (v->ph[2] - d.pos) * SLC_DIP / lim;
+                dip = e < dip ? e : dip;
+            }
+        }
         frac += stepq;
         while (frac >= 65536u) {
             frac -= 65536u;
             v->s[2] = v->s[3];
             if (!(rev ? slc_rev(s, v, rb, loop, &x) : slc_fwd(s, v, &d, loop, &x))) {
-                v->s[6] = 2;                            /* the slice ended */
                 v->s[3] = 0;
+                if (k) {                                /* STRETCH: silence till the next jump (it may go back into the data) */
+                    k->starved = 1;
+                    frac &= 0xFFFFu;
+                    break;
+                }
+                v->s[6] = 2;                            /* the slice ended */
                 break;
             }
             v->s[3] = x;
         }
-        y = v->s[2] + (((v->s[3] - v->s[2]) * (int32_t)(frac >> 1)) >> 15);
-        v->s[7] += mulq15(y - v->s[7], lp);             /* TONE */
+        y = sh ? v->s[2] : v->s[2] + (((v->s[3] - v->s[2]) * (int32_t)(frac >> 1)) >> 15);
+        if (k && k->starved)
+            y = 0;
+        if (sh)                                          /* BITS: to the nearest step of 2^sh */
+            y = clamp(((y + (1 << (sh - 1))) >> sh) << sh, -32768, 32767);
+        if (dip < SLC_DIP)                              /* STRETCH: the dip either side of a jump */
+            y = (y * (int32_t)dip) / (int32_t)SLC_DIP;
+        v->s[7] += mulq15(y - v->s[7], lp);             /* the fixed low-pass */
         out[i] += voice_amp(v->s[7], m, i) << 1;
         if (v->s[6] == 2)
             break;
     }
     v->ph[1] = frac;
+    if (!k) {                                           /* (STRETCH off: the timeline follows the read position) */
+        slc_str_t *q = slc_stv(t, v);
+        if (q && !rev) {
+            q->tpos = (int32_t)d.pos;
+            q->tfrac = 0;
+            q->glen = SLC_GRAIN;
+            q->gl = (int32_t)SLC_GRAIN;
+            q->starved = 0;
+        }
+    }
     if (!rev) {
         v->ph[0] = d.pos;
         v->s[0] = d.pred;
@@ -634,12 +754,12 @@ static const engine_t ENG_SLICE = {
     .edit = {
         {"SRC", F_ENUM, 0, SLC_NSRC - 1, 0, N_SLC_SRC, 0},
         {"DIV", F_ENUM, 0, 5, 2, N_SLC_DIV, 0},
-        {"START", F_INT, 0, 31, 0, 0, 0},
+        {"STRCH", F_INT, 0, 127, 0, 0, 0},
         {"PTCH", F_SEMI, -24, 24, 0, 0, 0},
         {"MODE", F_ENUM, 0, 2, 0, N_SLC_MODE, 0},
         {"REV", F_ENUM, 0, 1, 0, N_SLC_REV, 0},
         {"DCAY", F_TIME, 0, 127, 127, 0, 0},
-        {"TONE", F_INT, 0, 127, 127, 0, 0},
+        {"BITS", F_ENUM, 0, SLC_BITS_MAX, SLC_BITS_MAX, N_SLC_BITS, 0},
     },
     .presets = SLICE_PRESETS,
     .npresets = NELEM(SLICE_PRESETS),
@@ -649,5 +769,5 @@ static const engine_t ENG_SLICE = {
     .sampled = 1,
     .keys = slice_keys,
     .amp = slice_amp,
-    .mem = sizeof(slc_rbuf_t),
+    .mem = sizeof(slc_mem_t),
 };

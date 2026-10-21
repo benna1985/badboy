@@ -9,7 +9,7 @@
  * 2. AUTO: the detector (slc_scan) on BREAK finds its hits; on the user loop every onset has a slice
  *    start at most 6 ms before it and 1 ms after it, and no slice starts away from an onset.
  * 3. REV: a slice read backwards (64-sample windows from checkpoints) == the forward decode reversed.
- * 4. keys / steps -> slices (mod the count, START, ROOT, an empty slot plays the sine); ONE / GATE / LOOP.
+ * 4. keys / steps -> slices (mod the count, ROOT, an empty slot plays the sine); ONE / GATE / LOOP.
  * 5. demos into DEMO_DIR: both presets with their patterns, BREAK re-sequenced, the user loop sliced AUTO and MAN.
  * 8. PIANO (SRC 4, 1.0.4): the SAMPLE PIANO zone of middle C itself (no copy), its table, one AUTO slice, played;
  *    a missing sample (SLICE / SAMPLE / GRAIN on an empty slot) plays a sine at the note's pitch: zero crossings,
@@ -302,6 +302,77 @@ static sine_run_t sine_run(uint32_t eng, int16_t src, uint32_t note)
     r.hz = up > 1u ? (double)(up - 1u) * FS / (double)(last - first) : 0.0;
     return r;
 }
+
+/* 9: STRCH / BITS on a pure 220.5 Hz tone in USR4 (SRC 5), slice 0 of DIV 4 (0.8 s of it), MODE ONE: the pitch (rising
+ * zero crossings), the length (first to last sample above 1500), the largest step between samples (a click), the
+ * error against the clean render (BITS) */
+typedef struct {
+    double hz, secs, rms_err;
+    uint32_t step, peak;
+} str_run_t;
+static int32_t str_out[2][FS * 3u];
+static str_run_t str_run(int strch, int ptch, int bits, int ref)    /* ref 0 / 1: where the output goes (for the error) */
+{
+    track_t *t = &trk[0];
+    str_run_t r = {0, 0, 0, 0, 0};
+    uint32_t i, k, n = 0, up = 0, a0 = 0, a1 = 0;
+    int32_t *x = str_out[ref];
+    voices_off();
+    host_tracks_init();
+    blocks(FS / 5u / CTL);                                 /* (the mixer's filters settle: runs compare sample for sample) */
+    host_preset(t, SLC_ENG, 0);
+    t->p[P_E0] = 5;                                        /* SRC 5: USR4 */
+    t->p[P_E1] = 0;                                        /* DIV 4 */
+    t->p[P_E2] = (int16_t)strch;
+    t->p[P_E3] = (int16_t)ptch;
+    t->p[P_E4] = SLC_ONE;
+    t->p[P_E5] = 0;
+    t->p[P_E6] = 127;
+    t->p[P_E7] = (int16_t)bits;
+    for (i = 0; i < 4u; i++)
+        t->p[P_DIST + i] = 0;
+    t->p[P_ATK] = 0;
+    t->p[P_DEC] = 127;
+    t->p[P_SUS] = 127;
+    t->p[P_REL] = 10;
+    trk_note_on(t, 60, 100);
+    for (k = 0; k < FS * 3u / CTL; k++) {
+        int32_t o[2 * CTL];
+        mix_block(o, CTL);
+        for (i = 0; i < CTL; i++)
+            x[n++] = o[2 * i];
+    }
+    for (i = 1; i < n; i++) {
+        uint32_t d = (uint32_t)abs(x[i] - x[i - 1u]), a = (uint32_t)abs(x[i]);
+        r.step = d > r.step ? d : r.step;
+        r.peak = a > r.peak ? a : r.peak;
+        if (a > 1500u) {
+            if (!a0)
+                a0 = i;
+            a1 = i;
+        }
+    }
+    r.secs = (double)(a1 - a0) / FS;
+    /* the pitch inside one grain (the third: 3056 .. 4080, 40 samples off its dips): interpolated rising zero crossings */
+    {
+        double fz = 0, lz = 0;
+        for (i = 3096u; i < 4040u && a1 > 4100u; i++)
+            if (x[i - 1u] < 0 && x[i] >= 0) {
+                double z = (double)(i - 1u) + (double)(-x[i - 1u]) / (double)(x[i] - x[i - 1u]);
+                if (!up++)
+                    fz = z;
+                lz = z;
+            }
+        r.hz = up > 1u && lz > fz ? (double)(up - 1u) * FS / (lz - fz) : 0.0;
+    }
+    if (ref) {
+        double e = 0;
+        for (i = 0; i < n; i++)
+            e += ((double)x[i] - (double)str_out[0][i]) * ((double)x[i] - (double)str_out[0][i]);
+        r.rms_err = sqrt(e / n);
+    }
+    return r;
+}
 static int sine_ok(const char *what, sine_run_t r, double hz)
 {
     char m[120];
@@ -336,6 +407,7 @@ int main(int argc, char **argv)
                                     60, 0, 60, 63, 62, 0, 68, 0, 65, 66, 67, 0, 62, 70, 71, 72};
     const char *loop = argc > 1 ? argv[1] : "build/host/slice_loop";
     const char *dir = argc > 2 ? argv[2] : "build/slice_demo";
+    char tone[256];
     char path[512], msg[160];
     uint32_t hits[64], nh = 0, i, bad;
     int32_t worst;
@@ -412,6 +484,60 @@ int main(int argc, char **argv)
         check("USR6 erased: empty again", !slc_get(7) && !usr_nz[5], 0);
     }
 
+
+    snprintf(tone, sizeof tone, "%s/tone", dir);
+    {   /* 9: the Amigo-style STRCH (time stretch) and BITS (crunch) on a pure tone */
+        uint8_t *img = (uint8_t *)host_slots;
+        long nn;
+        str_run_t c, b, st, a, f, h, bt, bt2;
+        snprintf(path, sizeof path, "%s.hdr", tone);
+        nn = load(path, img + 3u * SMP_USER_SIZE, SMP_USER_DATA);
+        snprintf(path, sizeof path, "%s.bin", tone);
+        nn = nn == (long)sizeof(smp_user_hdr_t) ? load(path, img + 3u * SMP_USER_SIZE + SMP_USER_DATA, SMP_USER_SIZE - SMP_USER_DATA) : -1;
+        if (nn <= 0) {
+            printf("slice: no tone (%s.hdr / .bin: tests/slice_tone.py)\n", tone);
+            return 1;
+        }
+        smp_user_scan(3);
+        check("tone in USR4: valid, 3.2 s", usr_nz[3] == 1u && slc_get(5) && slc_usr[3].len == 70560u, "%u zones, %u samples",
+              usr_nz[3], slc_usr[3].len);
+        c = str_run(0, 0, SLC_BITS_MAX, 0);
+        check("STRCH 0, BITS 16: the slice as it was (220.5 Hz, 0.8 s)", c.hz > 218 && c.hz < 223 && c.secs > 0.75 && c.secs < 0.85,
+              "%.1f Hz, %.3f s", c.hz, c.secs);
+        b = str_run(0, 12, SLC_BITS_MAX, 0);
+        check("STRCH 0, PTCH +12: an octave up and half as long (varispeed)", b.hz > 436 && b.hz < 446 && b.secs > 0.35 && b.secs < 0.45,
+              "%.1f Hz, %.3f s", b.hz, b.secs);
+        st = str_run(64, 12, SLC_BITS_MAX, 0);
+        check("STRCH 64 (1.0x), PTCH +12: an octave up, the same 0.8 s", st.hz > 432 && st.hz < 450 && st.secs > 0.72 && st.secs < 0.88,
+              "%.1f Hz, %.3f s", st.hz, st.secs);
+        st = str_run(32, 0, SLC_BITS_MAX, 0);
+        check("STRCH 32 (0.5x): the same pitch, twice as long (1.6 s)", st.hz > 214 && st.hz < 227 && st.secs > 1.5 && st.secs < 1.7,
+              "%.1f Hz, %.3f s", st.hz, st.secs);
+        st = str_run(96, 0, SLC_BITS_MAX, 0);
+        check("STRCH 96 (2x): the same pitch, half as long (0.4 s)", st.hz > 214 && st.hz < 227 && st.secs > 0.35 && st.secs < 0.45,
+              "%.1f Hz, %.3f s", st.hz, st.secs);
+        st = str_run(32, 0, SLC_BITS_MAX, 0);
+        {   /* a click: the dips keep the jumps smooth. A jump without one moves ~ the peak; a sine moves 2 pi f A / FS */
+            uint32_t lim = (uint32_t)(6.2832 * 220.5 * st.peak / FS * 1.25) + 64u + st.peak / 12u;
+            check("STRCH 0.5x: no click at the grain jumps (largest step within a dip's ramp)", st.step <= lim, "step %u, limit %u, peak %u",
+                  st.step, lim, st.peak);
+        }
+        (void)str_run(0, 0, SLC_BITS_MAX, 0);                /* (a warm-up: the master's slow filters still hold the stretched run) */
+        h = str_run(0, 0, SLC_BITS_MAX, 0);
+        f = str_run(0, 0, 127, 1);                          /* a stored 127 (TONE's old default) */
+        check("BITS 127 (TONE's old default) plays as 16 bits, sample for sample", f.rms_err == 0.0 && f.peak == h.peak && f.step == h.step, "error %.3f", f.rms_err);
+        (void)a;
+        bt = str_run(0, 0, SLC_BITS_MAX, 0);
+        bt2 = str_run(0, 0, 7, 1);                          /* 8 bits, no interpolation */
+        check("BITS 8: crunch (error against clean: more than 8-bit rounding alone, less than the signal)",
+              bt2.rms_err > 40.0 && bt2.rms_err < 6000.0 && bt2.hz > 214 && bt2.hz < 227, "error %.0f RMS, %.1f Hz", bt2.rms_err, bt2.hz);
+        bt2 = str_run(0, 0, 3, 1);                          /* 4 bits */
+        check("BITS 4: coarser than BITS 8", bt2.rms_err > 150.0 && bt2.rms_err < 12000.0, "error %.0f RMS", bt2.rms_err);
+        (void)bt;
+        memset(img + 3u * SMP_USER_SIZE, 0xFF, SMP_USER_SIZE);
+        smp_user_scan(3);
+    }
+
     /* 3 */
     for (bad = 0, i = 0; i < 16u; i++)
         bad += rev_check(0, 2, i);
@@ -440,14 +566,14 @@ int main(int argc, char **argv)
         ok &= (v = voice_of(t, 59)) && slice_of(v) == 15u;
         trk_note_on(t, 76, 100);
         ok &= (v = voice_of(t, 76)) && slice_of(v) == 0u;
-        t->p[P_E2] = 3;                                    /* START */
+        t->p[P_E2] = 3;                                    /* (STRCH now: no START any more, the key alone picks) */
         trk_note_on(t, 60, 100);
-        ok &= (v = voice_of(t, 60)) && slice_of(v) == 3u;
+        ok &= (v = voice_of(t, 60)) && slice_of(v) == 0u;
         t->p[P_E2] = 0;
         t->p[P_ROOT] = 2;                                  /* ROOT D: D4 is slice 0 */
         trk_note_on(t, 62, 100);
         ok &= (v = voice_of(t, 62)) && slice_of(v) == 0u;
-        check("keys: note - C4 - ROOT + START mod 16", ok, 0);
+        check("keys: note - C4 - ROOT mod 16 (STRCH does not move the slice)", ok, 0);
         ok = 1;
         t->p[P_ROOT] = 0;
         t->p[P_E1] = SLC_DIV_AUTO;
