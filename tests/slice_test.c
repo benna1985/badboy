@@ -994,10 +994,38 @@ int main(int argc, char **argv)
 #else
     check("PIANO (SRC 4): none in a build without the CC0 samples", !slc_get(SLC_SRC_PIANO), 0);
 #endif
-    check("SRC: BREAK USR1 USR2 USR3 PIANO USR4 USR5 USR6 (append-only: 1.0.3's numbers kept)",
-          ENG_SLICE.edit[0].max == 7 && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
+    check("SRC: BREAK USR1 USR2 USR3 PIANO USR4 USR5 USR6 then the built-in breaks (append-only: 1.0.3's numbers kept)",
+          ENG_SLICE.edit[0].max == 7 + SLC_NBRK && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
           str_eq(N_SLC_SRC[3], "USR3") && str_eq(N_SLC_SRC[4], "PIANO") && str_eq(N_SLC_SRC[5], "USR4") &&
-          str_eq(N_SLC_SRC[7], "USR6") && SLC_BREAK.len != 0u, 0);
+          str_eq(N_SLC_SRC[7], "USR6") && SLC_BREAK.len != 0u && (!SLC_NBRK || str_eq(N_SLC_SRC[8], "AMEN")), 0);
+    {   /* the built-in breaks (SRC 8..): a table each, AUTO slices, keys play them and sound */
+        uint32_t k, ok = 1;
+        for (k = 0; k < SLC_NBRK; k++) {
+            const slc_src_t *b = slc_get(8u + k);
+            ok &= b != 0 && b->len > 22050u && b->nauto >= 2u && b->apos[0] == 0u && !slc_src_is_slot(8u + k);
+            if (b) bad = table_check(b), ok &= !bad;
+        }
+        check("built-in breaks (SRC 8..): valid tables, AUTO slices, build-time table == decoder", ok, "%u breaks", (unsigned)SLC_NBRK);
+        for (k = 0; k < SLC_NBRK; k++) {
+            track_t *t = &trk[0];
+            voice_t *v;
+            int32_t o[2 * CTL], pk = 0;
+            long n;
+            voices_off();
+            host_tracks_init();
+            host_preset(t, SLC_ENG, 0);
+            t->p[P_E0] = (int16_t)(8u + k);
+            t->p[P_E1] = SLC_DIV_AUTO;
+            trk_note_on(t, 62, 100);
+            v = voice_of(t, 62);
+            for (i = 0; i < 40u; i++) {
+                mix_block(o, CTL);
+                for (n = 0; n < (long)CTL; n++)
+                    pk = abs(o[2 * n]) > pk ? abs(o[2 * n]) : pk;
+            }
+            check("built-in break plays from its own table, sounding", v && slc_pk_src((uint32_t)v->s[4]) == 8u + k && pk > 1500, "SRC %u peak %d", 8u + k, pk);
+        }
+    }
     {   /* slot <-> SRC: USR1..3 are 1..3, USR4..6 are 5..7 (4 is PIANO) */
         uint32_t k, ok = 1;
         for (k = 0; k < SMP_USER_SLOTS; k++)
