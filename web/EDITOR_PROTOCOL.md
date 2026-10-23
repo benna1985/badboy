@@ -189,7 +189,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 | 2 GET | scope, id | scope, id, v14 |
 | 3 SET | scope, id, v14 | scope, id, v14 (the value after clamping). Setting global `G_ENGSEL` (id from DESC label "ENG") changes the engine: its defaults, then its first preset (as on the device) |
 | 4 DUMP | — | engine, preset, then P_COUNT × v14 (the selected track), then G_COUNT × v14 (globals) |
-| 5 DESC | scope, id | scope, id, fmt, min v14, max v14, def v14, label string, unit string, then for an enum (fmt 8) one name string per value (at most 24; firmware before the matrix: at most 16) |
+| 5 DESC | scope, id | scope, id, fmt, min v14, max v14, def v14, label string, unit string, then for an enum (fmt 8) one name string per value (at most 32 since the rave stabs, SAMPLE SET having 27; at most 24 before, and at most 16 before the matrix) |
 | 6 STEP_GET | index 0..NSTEP−1 | index, n (0..4 notes), note0..note3, time (0 NOTE, 1 TIE, 2 REST), flags (1 accent, 2 slide), vel, then (v5) hits (3 bytes, below), then (v7) chance 0..100, then (`52 01`) ratchet 1..4, then (`54 01`, 1.2) nudge + 8 (0..15: −8..+7 sixteenths of the step), then (`4B 01`, 1.5.5) condition 0..11 (0 none; with one the chance byte says 100) |
 | 7 STEP_SET | index, n, note0..3, time, flags, vel [, hits (3 bytes, v5) [, chance 0..100 (v7) [, ratchet 1..4 [, nudge + 8, 0..15 (1.2) [, condition 0..11 (1.5.5)]]]]] | same as STEP_GET (after the write). Without the hits the step keeps its own; without the chance, the ratchet or the nudge it keeps its own. The chance can only follow the hits, the ratchet the chance, the nudge the ratchet, the condition the nudge; a nudge byte above 15 or a condition above 11: no reply, nothing written. Without the condition byte a chance of 100 keeps the step's condition (below) |
 | 8 PRESET | engine, preset | engine, preset (applies the preset's sound to the selected track and sends; the steps and the track's own parameters stay, see "Sound loads and undo"). For another track, select it with `TRACK` first |
@@ -239,7 +239,7 @@ reply.
 unused mask bits in the last group must be zero. Oversized or incomplete transfers
 are rejected; SMP_WRITE decodes at most 256 bytes, SMP_END exactly 480 bytes.
 
-**User sample slot** (this fork: 6 slots of 40 KiB each, SAMPLE engine sets USR1..USR6 = 5..10, SLICE SRC USR1..USR3 = 1..3
+**User sample slot** (this fork: 6 slots of 40 KiB each, SAMPLE engine sets USR1..USR6 = 21..26, after the 16 rave stabs at 5..20, SLICE SRC USR1..USR3 = 1..3
 and USR4..USR6 = 5..7; upstream Felucca has 3 of 80 KiB; `SMP_INFO` reports the count and size; reference uploader
 `tools/fm1_sample_upload.py`, slot builder `sampleio.user_slot`; the editor's port of it is
 checked byte for byte by `web/test_web.mjs`): header at 0, ADPCM data at 512.
@@ -297,7 +297,7 @@ numbered 0..31 (the device shows U01..U32).
   = 4, stored then or sent by `UP_PUT`, is the DRUM engine with its default kit: the device rewrites it (engine 10,
   E1..E8 = DRUM KIT's {0, 64, 70, 64, 64, 100, 0, 0}, the other values and the pattern as they were). Projects
   and `PRESET` 4 / 4 do the same (a project's track keeps its steps). SET 4 itself stays (`DESC` names it "PIANO":
-  an alias, as SET 1; a `SET` of 4 lands on 0), and USR1..USR3 stay 5..7 (this fork appends USR4..USR6 as 8..10); GRAIN's SRC 4 plays PIANO.
+  an alias, as SET 1; a `SET` of 4 lands on 0), and the 16 rave stabs follow at 5..20 and USR1..USR6 at 21..26 (upstream: USR1..USR3 at 5..7); GRAIN's SRC 4 plays PIANO.
 - **DRUM KIT 1..3** were HAND, CYM and H+CYM until 1.0.4 (STD with a conga / claves, a cymbal, both). Since 1.0.5
   they play the VA kits 66, 10 and 77, and a record holding one loads as that kit: `UP_GET` / `UP_LOAD` give KIT 6, 5
   or 8 (the record itself is not rewritten). Projects, motion events and `SET` do the same.
