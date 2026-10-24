@@ -912,6 +912,9 @@ static int seq_miss(const track_t *t, const step_t *s, uint32_t idx)
     return step_chance(s) < 100u && rng() % 100u >= step_chance(s);
 }
 static uint32_t seq_hits(const track_t *t, const step_t *s, uint32_t period, uint32_t idx);   /* (ROLL, below) */
+static uint32_t seq_head(const track_t *t, uint32_t idx, uint32_t len);
+static uint32_t seq_tie_rolls(const track_t *t, uint32_t idx, uint32_t len);
+static uint32_t seq_part_len(const track_t *t, const step_t *s, uint32_t period, uint32_t idx, uint32_t len);
 #define SEQ_REP (1u << 16)
 #define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
 #define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
@@ -932,14 +935,16 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t qseq = t->p[P_QUANT] >= QN_SEQ && !(e->keys && e->keys(t, 0) >= 0);
     int32_t qtrn = qseq && t->p[P_QUANT] == QN_SEQT ? t->p[P_TRANS] : 0;
     if (!(skip & SEQ_REP)) {
-        t->rat_left = 0;
+        if (s->time != ST_TIE)                      /* (a TIE goes on with the repeats of a rolled note) */
+            t->rat_left = 0;
         if ((skip & SEQ_MISS) || (!(skip & SEQ_ROLLED) && seq_miss(t, s, idx))) {
+            t->rat_left = 0;
             seq_release(t);
             return;
         }
     }
     if (s->time == ST_TIE) {
-        if (t->seq_n) {
+        if (t->seq_n && !t->rat_left && !seq_tie_rolls(t, idx, len)) {
             t->seq_off = gate + period / 2u;
             t->seq_hold = (s->flags & SF_SLIDE) != 0 || next_tie;   /* chains hold at any GATE / swing */
         }
@@ -950,7 +955,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         return;
     }
     if (hits > 1u) {                                /* RATCH: the gate of a part, no slide or tie out */
-        gate = step_samples(t, period, idx) / hits * (uint32_t)t->p[P_SGATE] / 128u;
+        gate = seq_part_len(t, s, period, idx, len) / hits * (uint32_t)t->p[P_SGATE] / 128u;
         if (!(skip & SEQ_REP))
             t->rat_left = (uint8_t)(hits - 1u);
     }
@@ -1027,16 +1032,26 @@ static __attribute__((noinline)) void seq_audition(void)
  * The step is read again: an edit to fewer parts (or another source in a song) ends the repeats */
 static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
 {
-    const step_t *s = &seq_steps(t)[t->seq_idx];
-    uint32_t hits = seq_hits(t, s, period, t->seq_idx);
+    uint32_t len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u;
+    uint32_t h = seq_head(t, t->seq_idx, len), j, hits, part, at;
+    const step_t *s = &seq_steps(t)[h];
+    if (s->time != ST_NOTE) {
+        t->rat_left = 0;
+        return;
+    }
+    hits = seq_hits(t, s, period, h);
     if (t->rat_left >= hits) {
         t->rat_left = 0;
         return;
     }
-    if (t->seq_pos < (hits - t->rat_left) * (step_samples(t, period, t->seq_idx) / hits))
+    part = seq_part_len(t, s, period, h, len) / hits;
+    at = t->seq_pos;                                /* how far into the (tied) note the sequencer is */
+    for (j = h; j != t->seq_idx; j = (j + 1u) % len)
+        at += step_samples(t, period, j);
+    if (at < (hits - t->rat_left) * part)
         return;
     t->rat_left--;
-    seq_step(t, s, t->seq_idx, period, SEQ_REP);
+    seq_step(t, s, h, period, SEQ_REP);
 }
 
 /* ROLL (P_ROLL, P_RPIT): the parts a NOTE step plays: its RATCH, or as many repeats of the roll rate as fit its swung
@@ -1044,13 +1059,43 @@ static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
  * a note value of the quarter (1/8 1/16 1/32 1/64, then the triplets 1/8T 1/16T 1/32T). Not inlined: a divide, once
  * a step and once a part, off the audio ISR's loop */
 static const uint8_t ROLL_DEN[8] = {0, 2, 4, 8, 16, 3, 6, 12};
+/* a TIE step's NOTE: back over the TIEs before idx (at most the loop round) */
+static uint32_t seq_head(const track_t *t, uint32_t idx, uint32_t len)
+{
+    uint32_t k;
+    for (k = 1; k < len && seq_steps(t)[idx].time == ST_TIE; k++)
+        idx = (idx + len - 1u) % len;
+    return idx;
+}
+/* the length a rolled NOTE spreads its repeats over: the step and the TIEs after it (the note's whole length); the
+ * step alone without a ROLL (RATCH divides the one step, as before) */
+static uint32_t seq_part_len(const track_t *t, const step_t *s, uint32_t period, uint32_t idx, uint32_t len)
+{
+    uint32_t n = step_samples(t, period, idx), k, j;
+    if (!((uint32_t)t->p[P_ROLL] & 7u) || s->time != ST_NOTE)
+        return n;
+    for (k = 1; k < len; k++) {
+        j = (idx + k) % len;
+        if (seq_steps(t)[j].time != ST_TIE)
+            break;
+        n += step_samples(t, period, j);
+    }
+    return n;
+}
+/* the TIE at idx belongs to a rolled note: its repeats, not the TIE, decide when the note ends */
+static __attribute__((noinline)) uint32_t seq_tie_rolls(const track_t *t, uint32_t idx, uint32_t len)
+{
+    uint32_t h = seq_head(t, idx, len);
+    const step_t *s = &seq_steps(t)[h];
+    return s->time == ST_NOTE && ((uint32_t)t->p[P_ROLL] & 7u) && seq_hits(t, s, div_samples((uint32_t)t->p[P_SDIV]), h) > 1u;
+}
 static __attribute__((noinline)) uint32_t seq_hits(const track_t *t, const step_t *s, uint32_t period, uint32_t idx)
 {
     uint32_t h = step_ratchet(s), r = (uint32_t)t->p[P_ROLL] & 7u, q, n;
     if (!r || s->time != ST_NOTE)
         return h;
     q = beat_samples();
-    n = (step_samples(t, period, idx) * ROLL_DEN[r] + q / 2u + q / 8u) / (q ? q : 1u);   /* (a half rounds up: 1/16T on a 1/16 is 1.5) */
+    n = (seq_part_len(t, s, period, idx, t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u) * ROLL_DEN[r] + q / 2u + q / 8u) / (q ? q : 1u);   /* (a half rounds up: 1/16T on a 1/16 is 1.5) */
     n = n > 16u ? 16u : n;
     return n > h ? n : h;
 }

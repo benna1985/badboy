@@ -38,6 +38,28 @@ static uint32_t pass(track_t *t, int16_t *off, uint32_t nmax)
     return n;
 }
 
+/* a NOTE tied over `ties` more steps: the note-ons over the whole note (the last block before the loop's end left out) */
+static uint32_t tied(uint32_t sdiv, uint32_t roll, int rpit, uint32_t ties, int16_t *off)
+{
+    track_t *t = one_step(sdiv, roll, rpit, 1);
+    uint32_t k, total = 0, b, n = 0, v0, blocks;
+    t->p[P_SLEN] = (int16_t)(ties + 1u);
+    for (k = 1; k <= ties; k++)
+        t->step[k] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    seq_start();                                    /* (again: the loop length is what step 0 fires into) */
+    for (k = 0; k <= ties; k++)
+        total += step_samples(t, div_samples((uint32_t)t->p[P_SDIV]), k);
+    blocks = total / CTL - 1u;
+    for (b = 0; b < blocks; b++) {
+        v0 = vage;
+        seq_tick(t, CTL);
+        for (; v0 < vage; v0++, n++)
+            if (off && n < 20u)
+                off[n] = t->roll16[t->m_vi];
+    }
+    return n;
+}
+
 int main(void)
 {
     int bad = 0, ok;
@@ -84,6 +106,16 @@ int main(void)
     pass(t, 0, 0);
     trk_note_on(t, 64, 100);
     bad += check("  a note from the keys starts with no offset", t->roll16[t->m_vi] == 0 && t->roll_next == 0);
+
+    /* a tied note rolls over its whole length (4 steps of 1/16 = a quarter) */
+    bad += check("a note over 4 steps, ROLL OFF: one note-on", tied(2, 0, 0, 3, 0) == 1u);
+    bad += check("  1/16 (2): 4 repeats, one a step", tied(2, 2, 0, 3, 0) == 4u);
+    bad += check("  1/32 (3): 8", tied(2, 3, 0, 3, 0) == 8u);
+    bad += check("  1/64 (4): 16", tied(2, 4, 0, 3, 0) == 16u);
+    bad += check("  1/8 (1): 2", tied(2, 1, 0, 3, 0) == 2u);
+    bad += check("  over 2 steps at 1/32: 4", tied(2, 3, 0, 1, 0) == 4u);
+    n = tied(2, 3, 14, 3, off);
+    bad += check("  RPIT +14 over the 8 repeats: roll16 0 .. 224 in even steps", n == 8u && off[0] == 0 && off[7] == 224 && off[4] == 128);
 
     /* locks: the two are automatable */
     bad += check("P_ROLL and P_RPIT lock per step (motion_param)", motion_param(P_ROLL) && motion_param(P_RPIT));
