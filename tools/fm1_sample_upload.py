@@ -91,8 +91,9 @@ def build(name, specs):
     """specs: "file.wav[:ROOT[:LO-HI]]" -> (header, ADPCM data) for SMP_END / SMP_WRITE"""
     zones = []
     for spec in specs:
-        parts = spec.split(":")
-        path = Path(parts[0])
+        drive = spec[:2] if len(spec) > 2 and spec[1] == ":" and spec[2] in "\\/" else ""   # a Windows drive letter's colon
+        parts = spec[len(drive):].split(":")
+        path = Path(drive + parts[0])
         root = int(parts[1]) if len(parts) > 1 and parts[1] else sio.note_from_name(path.stem)
         lo, hi = (int(v) for v in parts[2].split("-")) if len(parts) > 2 else (None, None)
         sr, x = sio.read_any_wav(path)
