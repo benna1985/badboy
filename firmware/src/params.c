@@ -494,6 +494,7 @@ static const page_t PAGES[] = {
     {"STEP", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},
     {"DETAIL", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},   /* 1.5.1 (#199): the cursor step's CHANCE RATCH NUDGE VEL
                                                              * (ui.c detail_on, ui_input.c sd_turn) */
+    {"STEP FX", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},   /* the cursor step's ROLL / STRCH / PTCH locks (SLICE; ui.c fx_on) */
     {"AUTOMATION", FAM_SEQ, SC_TRACK, GR_EVENTS, {0xFF, 0xFF, 0xFF, 0xFF}},  /* the locks, events, CHANCE and RATCH as a
                                                                              * list, PLAY and CLEAR (ui_events.c) */
     {"ROLL", FAM_SEQ, SC_TRACK, GR_NONE, {P_ROLL, P_RPIT, 0xFF, 0xFF}},   /* repeats up to 1/64 + a pitch ramp (seq.c) */

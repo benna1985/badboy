@@ -714,7 +714,7 @@ static uint64_t lock_held(void)
     uint32_t k, len = (uint32_t)t->p[P_SLEN], keys = fm1_in.notes & ~kb_layer;
     uint64_t m = 0;
     if (ui.home || ui.menu || ui.confirm || ui.layer || name_on() || !song.seq_mode || cur_page()->graph != GR_ROLL ||
-        !keys || detail_on())                           /* (DETAIL: its knobs are the step's own fields, sd_turn) */
+        !keys || detail_on() || fx_on())                /* (DETAIL: its knobs are the step's own fields, sd_turn) */
         return 0;
     if (!grid_on())                                     /* the roll: the step being entered */
         return ui.entry_open && !live_rec_sel() && ui.cursor < len ? (uint64_t)1 << ui.cursor : 0u;
@@ -741,10 +741,10 @@ static void lock_keys(void)
 
 /* KNOB k turned s with the steps `held` held: each gets (or changes) its lock of lock_id(k), from its lock or the
  * sound's own value */
-static void lock_turn(uint32_t k, int32_t s, uint64_t held)
+static void lock_apply(uint32_t id, uint32_t k, int32_t s, uint64_t held)
 {
     track_t *t = TSEL;
-    uint32_t id = lock_id(k), i;
+    uint32_t i;
     const param_desc_t *d;
     if (chain_busy()) {
         ui_message("STOP TO EDIT");
@@ -766,6 +766,38 @@ static void lock_turn(uint32_t k, int32_t s, uint64_t held)
             break;                                      /* (full: ui_notices says so) */
     }
     motion_undo_done(t);
+}
+static void lock_turn(uint32_t k, int32_t s, uint64_t held)
+{
+    lock_apply(lock_id(k), k, s, held);
+}
+
+/* SEQ > STEP FX (ui.c fx_on): KNOB 1 the cursor, 2..4 the cursor step's ROLL / STRCH / PTCH locks */
+static void fx_turn(uint32_t slot, int32_t steps)
+{
+    if (slot == 0u)
+        cursor_move(ui.cursor + steps);
+    else
+        lock_apply(fx_id(slot), slot, steps, (uint64_t)1 << ui.cursor);
+}
+/* STEP FX's EDIT: the cursor step's three locks go (its other locks stay) */
+static void fx_reset(void)
+{
+    track_t *t = TSEL;
+    uint32_t k, n = 0;
+    int16_t v;
+    for (k = 1; k < 4u; k++)
+        n += fx_id(k) != 0xFFu && motion_lock_get(t, ui.cursor, fx_id(k), &v);
+    if (!n) {
+        ui_message("NO LOCKS");
+        return;
+    }
+    motion_undo_take(t, 0);
+    for (k = 1; k < 4u; k++)
+        if (fx_id(k) != 0xFFu && motion_lock_get(t, ui.cursor, fx_id(k), &v))
+            motion_delete_event(t, ui.cursor, fx_id(k));
+    motion_undo_done(t);
+    ui_message("LOCKS CLEARED");
 }
 
 /* [EDIT] with the steps `held` held: their locks go */
@@ -890,6 +922,11 @@ static void step_edit(uint32_t slot, int32_t steps)
 {
     step_t *st = &TSEL->step[ui.cursor];
     uint32_t i;
+    if (fx_on()) {                                        /* STEP FX: the step, ROLL, STRCH, PTCH */
+        follow_hold();
+        fx_turn(slot, steps);
+        return;
+    }
     if (detail_on()) {                                    /* DETAIL (1.5.1): CHANCE RATCH NUDGE VEL */
         follow_hold();
         sd_turn(slot, steps);
@@ -1270,7 +1307,7 @@ static void presets_turn(int32_t s)
     const page_t *pg = cur_page();
     uint32_t g = pg->graph;
     uint64_t held = lock_held();
-    if (detail_on()) {                                    /* DETAIL (1.5.1): the cursor (its KNOB 1 is CHANCE) */
+    if (detail_on() || fx_on()) {                         /* DETAIL (1.5.1): the cursor (its KNOB 1 is CHANCE) */
         if (chain_busy())
             ui_message("STOP TO EDIT");
         else
@@ -1338,6 +1375,13 @@ static void layer_lock_input(uint32_t pressed);
 static int page_tap(uint32_t b)
 {
     uint32_t f;
+    if (b == B_EDIT && fx_on()) {
+        if (chain_busy())
+            ui_message("STOP TO EDIT");
+        else
+            fx_reset();
+        return 1;
+    }
     if (b == B_EDIT && detail_on()) {                    /* DETAIL (1.5.1): the step's CHANCE RATCH NUDGE VEL back */
         if (chain_busy())
             ui_message("STOP TO EDIT");

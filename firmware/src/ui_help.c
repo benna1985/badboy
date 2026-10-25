@@ -50,6 +50,7 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"ARP", "[K1]MODE[KEYS]CHORD[ARP]ARP 2"},
     {"ARP 2", "[K3]LATCH[K4]ORDER[ARP]ARP"},
     {"STEP", "[KEYS]WRITE[K1]STEP[SEQ]RATCH"},   /* (1.5.1: SEQ to DETAIL) */
+    {"STEP FX", "[K1]STEP[K2]ROLL[K3]STRCH[K4]PTCH"},
     {"DETAIL", "[PRESETS]STEP[K1]CHANCE, 1:4, FILL"},   /* (1.5.5: the conditions past 100 %) */
     {"AUTOMATION", "[K1]ROW[OCT+]DO[EDIT]DELETE"},
     {"ROLL", "[K1]RATE[K2]PITCH RAMP"},

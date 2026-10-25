@@ -275,6 +275,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "1.5 STEP: a note's LEN (TIEs on KNOB 3), a step's VEL (playback, AUTOMATION's VEL rows)" "$OUT/step15_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/detail_test" tests/detail_test.c -lm
     run "1.5.1 SEQ > DETAIL: a step's CHANCE RATCH NUDGE VEL on KNOB 1..4 (walk, entries, undo, DRUM, chords, playback, marks)" "$OUT/detail_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/stepfx_test" tests/stepfx_test.c -lm
+    run "SEQ > STEP FX: a step's ROLL / STRCH / PTCH locks on KNOB 2..4, KNOB 1 the cursor (SLICE only for STRCH / PTCH, EDIT, playback)" "$OUT/stepfx_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/seq155_test" tests/seq155_test.c -lm
     run "1.5.5 SEQ: conditions and FILL, SONG, storage, editor; SEQ TOOLS EUCLID, DOUBLE, HALF" "$OUT/seq155_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/ui155_test" tests/ui155_test.c -lm

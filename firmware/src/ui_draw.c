@@ -1189,6 +1189,30 @@ static void draw_columns(void)
         draw_column(3, "AMT", val, unit, a ? VAL(3u) : T_DIM, RATIO(&TP[id + 2u], a), mod_src_icon(MS_OFF));
         return;
     }
+    if (fx_on()) {                                      /* STEP FX: the cursor step, its ROLL / STRCH / PTCH (locked: bright) */
+        char sn[8], sl[8];
+        fmt_int(sn, (int32_t)ui.cursor + 1);
+        str_cpy(sl, "/", 8);
+        fmt_int(sl + 1, TSEL->p[P_SLEN]);
+        draw_column(0, "STEP", sn, sl, VAL(0u), -1, ICON_AUTO);
+        for (c = 1; c < 4u; c++) {
+            uint32_t id = fx_id(c);
+            const param_desc_t *d;
+            int16_t v;
+            int on;
+            if (id == 0xFFu) {
+                draw_column(c, "", "", "", T_THEME, -1, ICON_AUTO);
+                continue;
+            }
+            d = track_desc(TSEL, id);
+            on = motion_lock_get(TSEL, ui.cursor, id, &v);
+            if (!on)
+                v = motion_base_value(TSEL, id);
+            param_format(d, v, val, &unit);
+            draw_column(c, d->label, val, unit, on ? VAL(c) : T_DIM, RATIO(d, enum_rank(d, v)), param_icon(d, v));
+        }
+        return;
+    }
     if (detail_on()) {                                  /* DETAIL (1.5.1, #199): the cursor step's CHANCE RATCH NUDGE VEL;
                                                          * DIM where they do not play (ui_input.c sd_turn) */
         static const char *const SD_LABEL[4] = {"CHANCE", "RATCH", "NUDGE", "VEL"};

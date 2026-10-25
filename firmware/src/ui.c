@@ -598,6 +598,20 @@ static int detail_on(void)
 {
     return !ui.home && !ui.menu && !ui.confirm && cur_page()->scope == SC_STEP && str_eq(cur_page()->title, "DETAIL");
 }
+/* SEQ > STEP FX: KNOB 1 walks the cursor, KNOB 2 / 3 / 4 lock ROLL / STRCH / PTCH on the cursor step alone (a motion
+ * lock, as a held step and a knob make; STRCH and PTCH only on a SLICE track, SLICE's own two) */
+static int fx_on(void)
+{
+    return !ui.home && !ui.menu && !ui.confirm && cur_page()->scope == SC_STEP && str_eq(cur_page()->title, "STEP FX");
+}
+static uint32_t fx_id(uint32_t k)
+{
+    if (k == 1u)
+        return P_ROLL;
+    if (k < 4u && TSEL->eng_req % NENGINES == ENGI_SLICE)
+        return k == 2u ? P_E2 : P_E3;
+    return 0xFFu;
+}
 /* GLO > SONG (1.2): the white keys A B C D (A3 B3 C4 D4, white places 2..5: seq.c song_key) set the selected cell's slot;
  * they do not sound there, the other keys play as anywhere (seq.c keyboard_block: song.grid 3) */
 static int song_keys_on(void) { return !ui.home && !ui.menu && !ui.confirm && !ui.layer && cur_page()->graph == GR_SONG; }
