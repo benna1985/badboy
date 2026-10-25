@@ -815,6 +815,18 @@ No new command; `DESC` describes them. Projects stay FUN10 (113 at byte 66; 8 by
 
 Both can be recorded as motion and set as parameter locks on a step (a roll on one step only, with its own pitch ramp).
 
+## Sequencer RAND (114 parameters)
+
+One track parameter before the engine parameters, after `RPIT`: P_COUNT 114, P_E0 106 (take both from `INFO` as always).
+No new command; `DESC` describes it. Projects stay FUN10 (114 at byte 66; 4 bytes to spare, 3 of them MIDI IN TRACK's); a
+FUN10 of 113 loads by count (RAND OFF), and older firmware refuses one of 114 as it does any with more parameters than its own.
+
+| id | label | values |
+| --- | --- | --- |
+| 105 | `RAND` | enum OFF, then S N SN F SF NF SNF at three levels (S1 S2 S3 N1 .. SNF3), default OFF: 22 values. The pattern is kept as written and each pass is varied as it plays: S = steps drop out, N = a step's notes move together by a few semitones (onto the scale), F = ROLL gets a rate and, on a SLICE track, STRCH (when on) wanders and PTCH shifts. The level is the chance a step is varied: 1 25 %, 2 55 %, 3 90 % (S drops at 60 % of it). A step's own ROLL / STRCH / PTCH lock wins over F. The values are put back at the next step and at STOP. On the device: SEQ > ROLL, KNOB 3 |
+
+Not lockable or recordable as motion.
+
 ## v7: full backup (65-67)
 
 INFO advertises `42 01 caps`: bit 0 = `BACKUP_LIST` / `BACKUP_GET` (read), bit 1 = `BACKUP_PUT` (restore);

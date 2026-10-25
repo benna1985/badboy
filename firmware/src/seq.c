@@ -853,6 +853,7 @@ static void seq_release(track_t *t)
     t->slide_glide = 0;                             /* live MONO / LEG keys must not glide after it */
 }
 
+static void seq_rand_back(track_t *t);              /* (RAND, below) */
 static void seq_stop(void)
 {
     uint32_t i;
@@ -866,6 +867,8 @@ static void seq_stop(void)
                 arp_off(&trk[i]);
     for (i = 0; i < NTRK; i++) {
         seq_release(&trk[i]);
+        seq_rand_back(&trk[i]);                    /* RAND: the FX back, the notes as written */
+        trk[i].rnd_off = 0;
         trk[i].rh_n = 0;                           /* a recorded note held over the stop: as far as it got */
         trk[i].rat_left = 0;
         trk[i].nd_late = trk[i].nd_early = ND_NONE;   /* (a nudged step not played yet: not after the stop) */
@@ -960,7 +963,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
             t->rat_left = (uint8_t)(hits - 1u);
     }
     for (i = 0; i < s->n && i < 4u; i++) {
-        uint32_t x = s->note[i];
+        uint32_t x = (uint32_t)clamp((int32_t)s->note[i] + t->rnd_off, 0, 127);   /* (RAND NOTES: seq_rand) */
         if (qseq) {                                 /* QNT SEQ: onto the scale now; two notes snapping */
             x = (uint32_t)clamp(scale_snap(t, (int32_t)x + qtrn), 0, 127);   /* together play once */
             for (j = 0; j < m && nn[j] != x; j++)
@@ -1128,6 +1131,72 @@ static const motion_store_t *chain_motion(const track_t *t)
     return !chain.running ? &motion : s < 4u ? &chain.source[s].motion : 0;
 }
 
+/* RAND (P_RND; ROLL page): the pattern stays as written, each step is varied as it plays. A step that plays
+ * (a NOTE with notes or hits) is varied with the chance of RAND's level (25, 55, 90 %; STEPS: 60 % of it), by what
+ * its letters let (params.c N_RND):
+ *   STEPS  the step drops out
+ *   NOTES  its notes move together by a few semitones (further as RAND grows), onto the scale; a drum hit stays
+ *   FX     ROLL gets a rate; on a SLICE track STRCH (when it is on) wanders around its value and PTCH shifts
+ * The FX are put back at the next step (the locks of a step win over them). seq_rand_pre: before the step's
+ * automation (puts the last step's FX back, picks the drop and the move; 1: drop); seq_rand_post: after it */
+static const uint8_t RND_AMT[3] = {25, 55, 90};
+/* P_RND -> the set of STEPS 1 / NOTES 2 / FX 4 (0: off) and the chance */
+static uint32_t rnd_what(const track_t *t, uint32_t *a)
+{
+    uint32_t v = (uint32_t)clamp(t->p[P_RND], 0, 21);
+    if (!v)
+        return 0;
+    *a = RND_AMT[(v - 1u) % 3u];
+    return (v - 1u) / 3u + 1u;
+}
+static const int8_t RND_MOVE[10] = {2, -2, 3, -3, 5, -5, 7, -7, 12, -12};
+static const uint8_t RND_FX[3] = {P_ROLL, P_E2, P_E3};
+static void seq_rand_back(track_t *t)
+{
+    uint32_t k;
+    if (!t->rnd_on)
+        return;
+    for (k = 0; k < 3u; k++)
+        if (t->p[RND_FX[k]] == t->rnd_s[k])             /* (a knob turned meanwhile stays) */
+            t->p[RND_FX[k]] = t->rnd_b[k];
+    t->rnd_on = 0;
+}
+static __attribute__((noinline)) uint32_t seq_rand_pre(track_t *t, const step_t *s)
+{
+    uint32_t a = 0, what = rnd_what(t, &a), n;
+    int32_t m;
+    seq_rand_back(t);
+    t->rnd_off = 0;
+    if (!what || s->time != ST_NOTE || (!s->n && !s->hit))
+        return 0;
+    if ((what & 1u) && rng() % 100u < a * 3u / 5u)
+        return 1;
+    if ((what & 2u) && s->n && rng() % 100u < a) {
+        n = a < 34u ? 4u : a < 67u ? 6u : 10u;
+        m = scale_snap(t, (int32_t)s->note[0] + RND_MOVE[rng() % n]) - (int32_t)s->note[0];
+        t->rnd_off = (int8_t)clamp(m, -24, 24);
+    }
+    return 0;
+}
+static __attribute__((noinline)) void seq_rand_post(track_t *t, const step_t *s, uint32_t idx)
+{
+    uint32_t a = 0, k, what = rnd_what(t, &a);
+    int16_t v;
+    if (!(what & 4u) || s->time != ST_NOTE || (!s->n && !s->hit) || rng() % 100u >= a)
+        return;
+    for (k = 0; k < 3u; k++)
+        t->rnd_b[k] = t->rnd_s[k] = t->p[RND_FX[k]];
+    if (!motion_lock_get(t, idx, P_ROLL, &v))
+        t->p[P_ROLL] = t->rnd_s[0] = (int16_t)(1 + rng() % 4u);   /* 1/8 .. 1/64 */
+    if (t->eng_req % NENGINES == ENGI_SLICE) {
+        if (t->rnd_b[1] && !motion_lock_get(t, idx, P_E2, &v))
+            t->p[P_E2] = t->rnd_s[1] = (int16_t)clamp((int32_t)t->rnd_b[1] + (int32_t)(rng() % (a * 4u / 5u + 1u)) - (int32_t)(a * 2u / 5u), 1, 127);
+        if (!motion_lock_get(t, idx, P_E3, &v))
+            t->p[P_E3] = t->rnd_s[2] = (int16_t)clamp((int32_t)t->rnd_b[2] + (int32_t)(rng() % (a / 6u * 2u + 1u)) - (int32_t)(a / 6u), -24, 24);
+    }
+    t->rnd_on = 1;
+}
+
 /* step idx plays: its chance (the one roll, as seq_step made it: a step that does not play applies no lock), the
  * automation and the locks before the notes (so a note-on reads them: eng_drum's KIT, ..), the notes live recording
  * already sounds left out (rskip), then its notes. On its start, or (NUDGE) at its start + its nudge */
@@ -1136,10 +1205,12 @@ static __attribute__((noinline)) void seq_play(track_t *t, uint32_t idx, uint32_
     const step_t *s = &seq_steps(t)[idx];
     const motion_store_t *m = chain_motion(t);
     uint32_t skip = SEQ_ROLLED, i, k;
-    if (seq_miss(t, s, idx))
+    if (seq_miss(t, s, idx) || seq_rand_pre(t, s))
         skip = SEQ_MISS;
     if (m)
         motion_step(t, idx, m, skip == SEQ_ROLLED);
+    if (skip == SEQ_ROLLED)
+        seq_rand_post(t, s, idx);
     if (t->rskip_n && t->rskip_idx == idx) {
         for (k = 0; k < t->rskip_n; k++) {
             for (i = 0; i < s->n; i++)

@@ -70,6 +70,7 @@ enum {                          /* per-track parameters */
     P_FTYPE,                                   /* 1.5 (#104): ANALOG's filter TYPE, LP (as before) / BP / HP (eng_analog.c) */
     P_ESYNC,                                   /* 1.5 (#175): ENV SYNC: ATK DEC REL as note values of the tempo (voice.c) */
     P_ROLL, P_RPIT,                            /* ROLL: repeat rate of a sequenced note (up to 1/64), and the pitch ramp over the repeats (seq.c) */
+    P_RND,                                     /* RAND: what each pass varies at random (steps / notes / FX) and how much (seq.c seq_rand) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -280,6 +281,10 @@ typedef struct track {
     uint8_t seq_n;
     uint8_t seq_hold;            /* last step slides: keep the notes until the next step */
     uint8_t slide_glide;         /* next legato note glides (slide) */
+    int8_t rnd_off;              /* RAND: the semitones the playing step is moved by (seq.c seq_rand), 0 = none */
+    uint8_t rnd_on;              /* RAND FX: the ROLL / STRCH / PTCH of the step were replaced (restored at the next step) */
+    int8_t rnd_b[3], rnd_s[3];   /* .. their values before and the ones set */
+    uint8_t rnd_pad[7];          /* (track_t stays a multiple of 16 bytes) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
     uint32_t seq_off;
     uint8_t seq_active;          /* any step programmed */

@@ -119,7 +119,7 @@ int main(void)
 
     /* locks: the two are automatable */
     bad += check("P_ROLL and P_RPIT lock per step (motion_param)", motion_param(P_ROLL) && motion_param(P_RPIT));
-    bad += check("  they sit before P_E0 (ids of the engine values move, the common ones do not)", P_RPIT + 1 == P_E0 && P_ROLL == P_ESYNC + 1);
+    bad += check("  they sit before P_E0 (ids of the engine values move, the common ones do not)", P_RPIT + 1 == P_RND && P_RND + 1 == P_E0 && P_ROLL == P_ESYNC + 1);
     bad += check("  defaults: OFF, 0", TP[P_ROLL].def == 0 && TP[P_RPIT].def == 0 && TP[P_ROLL].max == 7 && TP[P_RPIT].min == -24 && TP[P_RPIT].max == 24);
     printf("%s\n", bad ? "roll: FAILED" : "roll: ok");
     return bad != 0;

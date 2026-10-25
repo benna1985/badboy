@@ -53,7 +53,7 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"STEP FX", "[K1]STEP[K2]ROLL[K3]STRCH[K4]PTCH"},
     {"DETAIL", "[PRESETS]STEP[K1]CHANCE, 1:4, FILL"},   /* (1.5.5: the conditions past 100 %) */
     {"AUTOMATION", "[K1]ROW[OCT+]DO[EDIT]DELETE"},
-    {"ROLL", "[K1]RATE[K2]PITCH RAMP"},
+    {"ROLL", "[K1]RATE[K2]RAMP[K3]RAND: S N F, 1-3"},
     {"MIXER", "[K4]MUTE[ALGO]TRACK[HOME]CLOCK"},
     {"CLOCK", "[SELECT]TEMPO[GLO]HOLD: TAP"},
 };
