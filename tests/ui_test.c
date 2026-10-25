@@ -518,6 +518,38 @@ static int test_sound_loads(void)
                      str_eq(sd->names[36], "USR3") && str_eq(sd->names[37], "USR4") && str_eq(sd->names[39], "USR6") && sd->max == 39 &&
                      enum_orig(&ENGINES[8]->edit[0], SMP_SET_PERC) == 0 && SMP_SETS[SMP_SET_PERC].z0 == SMP_SETS[0].z0);
     }
+    {   /* the stabs, the basses, SLICE's sounds and the factory BASS category load MONO (a key plays again) and dry */
+        uint32_t k, ok = 1, e;
+        set_engine_of(TSEL, 4);
+        for (k = 5; k < 34u; k++) {                      /* 16 stabs, 13 basses */
+            apply_preset_to(TSEL, k);
+            ok &= TSEL->p[P_VOICE] == V_MONO && !TSEL->p[P_DIST] && !TSEL->p[P_CHOR] && !TSEL->p[P_DLY] && !TSEL->p[P_REV];
+        }
+        bad += check("SAMPLE's 16 stabs and 13 basses load MONO (retriggering) with no sends", ok);
+        apply_preset_to(TSEL, 0);
+        ok = TSEL->p[P_VOICE] == V_POLY && TSEL->p[P_CHOR] == 24 && TSEL->p[P_DLY] == 28 && TSEL->p[P_REV] == 36;
+        apply_preset_to(TSEL, 2);
+        ok &= TSEL->p[P_VOICE] == V_POLY;
+        bad += check("  PIANO and FLUTE stay POLY with the default sends", ok);
+        set_engine_of(TSEL, ENGI_SLICE);
+        for (k = 0; k < 2u; k++) {
+            apply_preset_to(TSEL, k);
+            ok &= TSEL->p[P_VOICE] == V_MONO && !TSEL->p[P_DIST] && !TSEL->p[P_CHOR] && !TSEL->p[P_DLY] && !TSEL->p[P_REV];
+        }
+        bad += check("  SLICE's CHOP and STUTTER: MONO, no sends", ok);
+        ok = 1;
+        for (e = 0; e < NENGINES; e++) {                 /* the factory basses of every engine: dry; the synths keep their mono mode */
+            if (!eng_ok(e) || e == ENGI_DIGITAL) continue;
+            for (k = 0; k < ENGINES[e]->npresets; k++) {
+                if (preset_cat(e, k) != CAT_BASS || preset_orig(ENGINES[e], k) != k) continue;
+                set_engine_of(TSEL, e);
+                apply_preset_to(TSEL, k);
+                ok &= !TSEL->p[P_DIST] && !TSEL->p[P_CHOR] && !TSEL->p[P_DLY] && !TSEL->p[P_REV] &&
+                      TSEL->p[P_VOICE] == (e == ENGI_SAMPLE ? V_MONO : ENGINES[e]->presets[k].mono ? V_LEGATO : V_POLY);
+            }
+        }
+        bad += check("  every factory BASS sound of every engine loads with no sends", ok);
+    }
     host_legacy_sample_perc(t);                /* SAMPLE PERC (SET 4, retired after 1.0.2): every load gives DRUM */
     t->preset = 4;                             /* a project written before the factory removal */
     my_steps(t);

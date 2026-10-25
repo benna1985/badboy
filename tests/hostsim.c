@@ -84,6 +84,7 @@ static void host_tracks_init(void)                /* as felucca_init: defaults, 
     song.master_q12 = 4096;
 }
 
+#include "../firmware/src/category.c"      /* preset_sampled / preset_dry (the BASS category of the factory presets) */
 /* the factory preset as ui.c apply_preset_to sets it (sound, sends; not the steps, not the track's own:
  * the mix, ARP, SCL, the pattern parameters, the SLICER);
  * the engine as the UI asks for it (eng_req: the audio side switches; host_preset: at once) */
@@ -100,9 +101,9 @@ static void host_preset_values(track_t *t, uint32_t e, uint32_t pi, const preset
     t->p[P_SUS] = p->env[2];
     t->p[P_REL] = p->env[3];
     t->p[P_ED_FLT] = p->fenv;
-    t->p[P_VOICE] = p->mono ? V_LEGATO : V_POLY;
+    t->p[P_VOICE] = preset_sampled(e, pi) ? V_MONO : p->mono ? V_LEGATO : V_POLY;
     for (i = 0; i < 4u; i++)
-        t->p[P_DIST + i] = (int16_t)(p->fx[i] ? p->fx[i] - 1 : FX_DEF[i]);
+        t->p[P_DIST + i] = preset_dry(e, pi) ? 0 : (int16_t)(p->fx[i] ? p->fx[i] - 1 : FX_DEF[i]);
     fm6_track_loaded(t);                          /* FM6: the preset's patch (ui.c apply_preset_to) */
 }
 static void host_preset_req(track_t *t, uint32_t e, uint32_t pi)

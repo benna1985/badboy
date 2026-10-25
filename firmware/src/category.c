@@ -48,5 +48,10 @@ static uint32_t preset_cat(uint32_t e, uint32_t k)    /* factory preset k of eng
         ;
     return s[i] && L[c] ? c : cat_of_engine(e);
 }
+/* a factory preset of the sampled sounds: SAMPLE's stabs and basses (SET 5 up) and SLICE's. They load MONO (V_MONO: every
+ * key plays its sample or slice again) and, with every factory BASS, DRY: no sends (a preset without sends gets the chorus
+ * / delay / reverb defaults, FX_DEF) */
+static uint32_t preset_sampled(uint32_t e, uint32_t k) { return (e == ENGI_SAMPLE && k >= 5u) || e == ENGI_SLICE; }
+static uint32_t preset_dry(uint32_t e, uint32_t k) { return preset_sampled(e, k) || preset_cat(e, k) == CAT_BASS; }
 #endif
 #endif

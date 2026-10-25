@@ -129,6 +129,7 @@ static int drum_from_phys(uint32_t engine, int16_t *e)
  * ENGI_DRUM now); projects (project.c proj_perc), user presets (upreset.c up_migrate), factory preset 4 and
  * favourites (ui.c, settings_persist.c). Idempotent */
 #define ENGI_SAMPLE 4u
+#define ENGI_SLICE 13u           /* (engines.c: the SLICE engine, FELUCCA_SLICE=0 builds without it) */
 #define SMP_SET_PERC 4u
 #define DRUM_KIT_E {0, 64, 70, 64, 64, 100, 0, 0}   /* {KIT STD, TUNE, TONE, DECY, SNAP, ACC, KICK PUNCH, DRV} */
 static int drum_from_perc(uint32_t engine, int16_t *e)

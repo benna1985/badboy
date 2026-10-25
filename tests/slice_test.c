@@ -268,6 +268,7 @@ static sine_run_t sine_run(uint32_t eng, int16_t src, uint32_t note)
     voices_off();
     host_tracks_init();
     host_preset(t, eng, 0);
+    t->p[P_VOICE] = V_POLY;                                /* (the sampled factory sounds are MONO now: a held-note stack carries over here) */
     t->p[P_E0] = src;
     for (i = 0; i < 4u; i++)
         t->p[P_DIST + i] = 0;
@@ -602,6 +603,7 @@ int main(int argc, char **argv)
             uint32_t held, after, k;
             host_tracks_init();
             host_preset(t, SLC_ENG, 0);
+            t->p[P_VOICE] = V_POLY;
             t->p[P_E0] = 0;
             t->p[P_E4] = (int16_t)m;
             t->p[P_REL] = 10;

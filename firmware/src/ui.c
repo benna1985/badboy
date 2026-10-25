@@ -1369,12 +1369,13 @@ static void apply_preset_to(track_t *t, uint32_t pi)
     t->p[P_SUS] = e->presets[pi].env[2];
     t->p[P_REL] = e->presets[pi].env[3];
     t->p[P_ED_FLT] = e->presets[pi].fenv;
-    t->p[P_VOICE] = e->presets[pi].mono ? V_LEGATO : V_POLY;   /* mono presets keep the legato feel */
-    {   /* the sends */
+    t->p[P_VOICE] = preset_sampled(t->eng_req % NENGINES, pi) ? V_MONO : e->presets[pi].mono ? V_LEGATO : V_POLY;   /* (mono presets keep the legato feel) */
+    {   /* the sends: none for the bass and sampled sounds */
         static const uint8_t FX_DEF[4] = {0, 24, 28, 36};
         const preset_t *pr = &e->presets[pi];
+        uint32_t dry = preset_dry(t->eng_req % NENGINES, pi);
         for (i = 0; i < 4u; i++)
-            t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
+            t->p[P_DIST + i] = dry ? 0 : (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
     }
     fm6_track_loaded(t);                              /* FM6: the preset's patch (its SLOT) */
     load_end(t);
