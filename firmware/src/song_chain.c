@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* A song uses the sequences of four saved projects, with the current sounds.
+/* A song uses the sequences AND the sounds of four saved projects (1.5.7; up to then the sequences only, with the
+ * current sounds): a track plays each section with the engine, preset and sound values its slot's project has for
+ * it (everything but LEN DIV SWING GATE QUANTIZE, which the slot's sequence sets, and the track's MUTE). The sounds
+ * the tracks had before PLAY come back on STOP. A silent lane ("-") keeps the sound of the section before. FM6's own
+ * patch (not a factory SLOT) stays the track's: a project's patch is not carried here.
  * Sources are copied in the main loop before PLAY. The ISR changes only their
  * index and five timing parameters; the editable steps stay untouched.
  *
@@ -14,6 +18,10 @@
  * A silent track ("-", CHAIN_SILENT) plays nothing in that section: at its start the track's sequenced notes are
  * released (seq_release, as at every section) and its automation goes back to the sound's own values (motion_restore);
  * no step, automation or lock of any slot plays there. Live keys and the arp still play it (the sound stays). */
+typedef struct {                             /* a track's sound: engine, preset and every value (+ 64: the project's byte) */
+    uint8_t eng, preset;
+    uint8_t p[P_COUNT];
+} chain_snd_t;
 typedef struct {
     step_t step[NTRK][NSTEP];
     int16_t timing[NTRK][4];
@@ -23,6 +31,8 @@ typedef struct {
 static chain_config_t chain_config;
 static struct {
     chain_pattern_t source[4];
+    chain_snd_t snd[4][NTRK];                /* the sounds of the slots in use (chain_prepare) */
+    chain_snd_t home[NTRK];                  /* the tracks' own, back on STOP */
     chain_config_t config;
     int16_t timing[NTRK][4];                 /* the editable LEN DIV SWING GATE and QUANTIZE, back on STOP */
     uint8_t qnt[NTRK];
@@ -107,6 +117,26 @@ static const step_t *seq_steps(const track_t *t)
     return s < 4u ? chain.source[s].step[k] : chain_silent;
 }
 static void motion_restore(track_t *t);
+/* a track's sound: the engine asked for (the audio ISR switches over with a fade, voice.c engine_block), its preset
+ * and values; what the song's slots own (LEN DIV SWING GATE QUANTIZE) and the MUTE stay */
+static void chain_sound_save(const track_t *t, chain_snd_t *d)
+{
+    uint32_t i;
+    d->eng = t->eng_req;
+    d->preset = t->preset;
+    for (i = 0; i < P_COUNT; i++)
+        d->p[i] = (uint8_t)(clamp(t->p[i], -64, 127) + 64);
+}
+static __attribute__((noinline)) void chain_sound_set(track_t *t, const chain_snd_t *s, uint32_t fit)
+{
+    uint32_t i, e = s->eng % NENGINES;
+    t->eng_req = (uint8_t)e;
+    t->preset = s->preset;
+    t->user = 0;
+    for (i = 0; i < P_COUNT; i++)
+        if (!chain_owns(i) && i != P_MUTE)
+            t->p[i] = fit ? (int16_t)param_fit(param_desc_of(e, i), (int32_t)s->p[i] - 64) : (int16_t)((int32_t)s->p[i] - 64);   /* (the own sound back exactly) */
+}
 /* a section starts (chain_start, chain_tick: once a section, not per block; not inlined: off the audio ISR's loop) */
 static __attribute__((noinline)) void chain_apply(void)
 {
@@ -118,6 +148,8 @@ static __attribute__((noinline)) void chain_apply(void)
         uint32_t s = r->slot[i];
         chain.lane[i] = (uint8_t)(s < 4u ? s : CHAIN_SILENT);
         seq_release(t);
+        if (s < 4u)
+            chain_sound_set(t, &chain.snd[s][i], 1);
         motion_restore(t);
         if (s < 4u) {
             memcpy(&t->p[P_SLEN], chain.source[s].timing[i], sizeof chain.timing[i]);
@@ -143,6 +175,7 @@ static void chain_start(void)
     for (i = 0; i < NTRK; i++) {
         memcpy(chain.timing[i], &trk[i].p[P_SLEN], sizeof chain.timing[i]);
         chain.qnt[i] = (uint8_t)trk[i].p[P_SQNT];
+        chain_sound_save(&trk[i], &chain.home[i]);
     }
     chain.row = 0;
     chain.remaining = chain.config.row[0].repeat;
@@ -160,6 +193,7 @@ static void chain_stop(void)
     for (i = 0; i < NTRK; i++) {
         memcpy(&trk[i].p[P_SLEN], chain.timing[i], sizeof chain.timing[i]);
         trk[i].p[P_SQNT] = chain.qnt[i];
+        chain_sound_set(&trk[i], &chain.home[i], 0);
     }
     song.rec = chain.rec;
     chain.running = 0;

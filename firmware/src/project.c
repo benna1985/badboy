@@ -1215,18 +1215,15 @@ static uint32_t chain_prepare(void)
             project_t *p = &proj_scratch;
             if (!proj_import(p, &proj_slot[i], sizeof(project_store_t))) return 3u + i;
             chain.source[i].motion = p->motion;
-            /* A song keeps its current instruments. Engine-specific motion from
-             * another instrument would change a kit/wave/algorithm unexpectedly. */
-            {
-                motion_store_t *m = &chain.source[i].motion; uint32_t n = 0;
-                for (uint32_t e = 0; e < m->count; e++) {
-                    const motion_event_t *v = &m->event[e]; uint32_t owner = v->place >> 6;
-                    if (MOTION_ID(v) >= P_FM1_ATK && p->t[owner].engine != trk[owner].eng_req) continue;
-                    m->event[n++] = *v;
-                }
-                m->count = (uint8_t)n;
-            }
+            /* A song plays each slot's sounds too (song_chain.c chain_sound_set), so its motion keeps all its ids. */
             for (k = 0; k < NTRK; k++) {
+                const proj_trk_t *pt = &p->t[k];
+                chain_snd_t *sd = &chain.snd[i][k];
+                sd->eng = pt->engine < NENGINES ? pt->engine : 0u;
+                sd->preset = (uint8_t)(ENGINES[sd->eng]->npresets ?
+                                       (pt->preset >= PROJ_DEF_KEEP ? 0u : pt->preset) % ENGINES[sd->eng]->npresets : 0u);
+                for (j = 0; j < P_COUNT; j++)
+                    sd->p[j] = (uint8_t)(clamp(pt->p[j], -64, 127) + 64);
                 memcpy(chain.source[i].step[k], p->t[k].step, sizeof p->t[k].step);
                 proj_steps(chain.source[i].step[k]);
                 chain.source[i].qnt[k] = p->t[k].p[P_SQNT] != 0;
