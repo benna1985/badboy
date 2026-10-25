@@ -136,6 +136,16 @@ static void pbank_stop(void)
 {
     pbank_bar();
 }
+/* slot idx of track t emptied (the live pattern too: an empty one, its sound kept) */
+static void pbank_clear(track_t *t, uint32_t idx)
+{
+    uint32_t k = trk_index(t);
+    idx %= NPAT;
+    memset(&pbank[k][idx], 0, sizeof pbank[k][idx]);
+    pbank_dirty |= (uint8_t)(1u << k);
+    if (t->pat == idx)
+        pbank_load(t, idx);
+}
 /* slot src of track t copied over slot dst (the live pattern first stored); dst becomes the pattern playing if it was */
 static void pbank_copy(track_t *t, uint32_t src, uint32_t dst)
 {

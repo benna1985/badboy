@@ -2664,7 +2664,7 @@ static int test_presets_knob(void)
                 sel_ok &= song.g[G_SLOT] == slot + 1 && same_snd && same_steps;
             } else if (g == GR_PATS) {
                 sel_ok &= pat_pick() == ppick + 1u && same_snd && same_steps;
-            } else if (g == GR_SONG) {
+            } else if (g == GR_SONG || g == GR_LAUNCH) {
                 sel_ok &= same_snd && same_steps && ui.page == i;
             } else if (g == GR_EVENTS) {               /* (AUTOMATION: its row, PLAY's to the first record's) */
                 sel_ok &= same_snd && same_steps && ui.page == i && ui.ev_row == 1u;
@@ -2735,7 +2735,7 @@ static int test_page_cycles(void)
     for (i = 0; i < NPAGES; i++) {                       /* every page in a family its button reaches, and its LED */
         uint32_t f = PAGES[i].fam;
         ok &= f != FAM_SEQ || PAGES[i].graph == GR_ROLL || PAGES[i].graph == GR_EVENTS || str_eq(PAGES[i].title, "ROLL");
-        ok &= f != FAM_GLO || PAGES[i].graph == GR_SONG;   /* (1.2: GLO's only page) */
+        ok &= f != FAM_GLO || PAGES[i].graph == GR_SONG || PAGES[i].graph == GR_LAUNCH;   /* (1.2: SONG, 1.6: LAUNCH) */
         ok &= f != FAM_TRK || PAGES[i].graph == GR_TRK || str_eq(PAGES[i].title, "CLOCK");   /* HOME's: MIXER CLOCK */
         ok &= PAGES[i].graph != GR_TRK || f == FAM_TRK;
         ui_power_on(); ui.home = 0; ui.page = (uint8_t)i; page_entered();
@@ -2775,12 +2775,15 @@ static int test_page_cycles(void)
     open_family(FAM_SEQ); ok &= cur_page()->graph == GR_ROLL;
     open_family(FAM_ENV); ok &= str_eq(cur_page()->title, "ENV");
     open_family(FAM_SAVE); ok &= str_eq(cur_page()->title, "USER");
-    open_family(FAM_GLO); open_family(FAM_GLO);          /* SONG again (its only page) */
+    open_family(FAM_GLO); open_family(FAM_GLO);          /* SONG, LAUNCH (1.6), and round */
+    ok &= str_eq(cur_page()->title, "LAUNCH");
+    open_family(FAM_GLO);
     ok &= str_eq(cur_page()->title, "SONG");
     go_home(); open_family(FAM_GLO); ok &= str_eq(cur_page()->title, "SONG");
     for (i = 0; i < 256u; i++) {                         /* any remembered index (the old GLOBAL 25, SYSTEM 27, ..) */
         go_home(); ui.fam_last[FAM_GLO] = (uint8_t)i; open_family(FAM_GLO);
-        ok &= str_eq(cur_page()->title, "SONG") && ui.fam_last[FAM_GLO] == ui.page;
+        ok &= (str_eq(cur_page()->title, "SONG") || (PAGES[i].graph == GR_LAUNCH && str_eq(cur_page()->title, "LAUNCH"))) &&
+              ui.fam_last[FAM_GLO] == ui.page;
         go_home(); ui.fam_last[FAM_TRK] = (uint8_t)i; press(B_HOME);
         ok &= cur_page()->graph == GR_TRK && !ui.home;
     }
@@ -2927,9 +2930,9 @@ static int test_product_ux(void)
     ui_power_on();
     frames(320);                                       /* (taps further apart than a double tap: #83) */
     press(B_GLO); frames(320); ok = cur_page()->fam == FAM_GLO && str_eq(cur_page()->title, "SONG");
-    press(B_GLO); frames(320); ok &= str_eq(cur_page()->title, "SONG") && cur_page()->fam == FAM_GLO && !ui.home;
-    go_title("CLOCK"); press(B_GLO); frames(320); ok &= str_eq(cur_page()->title, "SONG");
-    bad += check("1.2: GLO opens SONG directly, again SONG (no GLOBAL, no SYSTEM, no MIXER)", ok);
+    press(B_GLO); frames(320); ok &= str_eq(cur_page()->title, "LAUNCH") && cur_page()->fam == FAM_GLO && !ui.home;   /* (1.6: GLO's second page) */
+    go_title("CLOCK"); press(B_GLO); frames(320); ok &= str_eq(cur_page()->title, "LAUNCH");   /* (the page shown last) */
+    bad += check("1.2: GLO opens SONG directly, again LAUNCH (1.6) (no GLOBAL, no SYSTEM, no MIXER)", ok);
     go_home(); btn_down(B_SEQ); frames(500);
     ok = ui.layer == LAYER_SEQ && ui.home;
     btn_up(B_SEQ); frame();
@@ -7227,7 +7230,7 @@ static int test_layer_lock(void)
     btn_down(B_GLO); frames(500);
     ok &= ui.layer == LAYER_GLO && !ui.lock;
     btn_up(B_GLO); frame();
-    ok &= !ui.layer && !ui.lock && str_eq(cur_page()->title, "SONG");
+    ok &= !ui.layer && !ui.lock && str_eq(cur_page()->title, "LAUNCH");
     press(B_SCL);
     lay_combo(B_SCL, white(2));
     key_up(white(2)); btn_up(B_SCL); frame(); frames(400);

@@ -188,6 +188,7 @@ static struct {
     uint8_t ppick;               /* SAVE > PHRASES: the pattern picked (pat_count list index) */
     uint8_t song_row;            /* SONG: the section selected, count selects + ADD */
     uint8_t song_trk;            /* SONG: the lane (track) selected, 0..NTRK-1 */
+    uint8_t l_all, l_dest, l_now;   /* GLO > LAUNCH: launch every track (else the selected), the slot COPY / CLEAR act on, NOW (else at the bar) */
     uint16_t ev_row;             /* SEQ > AUTOMATION (ui_events.c ev_*): the row selected (0 PLAY / CLEAR, 1 QUANTIZE, the
                                   * last + ADD; 1.2: up to EV_ROWS, past 255) */
     uint8_t ev_step, ev_id;      /* .. + ADD: the step and the parameter (or EV_CHANCE, EV_RATCH, EV_NUDGE, EV_VEL) it
@@ -620,6 +621,9 @@ static uint32_t fx_id(uint32_t k)
 }
 /* GLO > SONG (1.2): the white keys A B C D (A3 B3 C4 D4, white places 2..5: seq.c song_key) set the selected cell's slot;
  * they do not sound there, the other keys play as anywhere (seq.c keyboard_block: song.grid 3) */
+/* GLO > LAUNCH (1.6): the 16 white keys are the selected track's patterns (all tracks' with SCOPE ALL), pbank.c; they do
+ * not sound there (seq.c keyboard_block: song.grid 4) */
+static int launch_on(void) { return !ui.home && !ui.menu && !ui.confirm && !ui.layer && cur_page()->graph == GR_LAUNCH; }
 static int song_keys_on(void) { return !ui.home && !ui.menu && !ui.confirm && !ui.layer && cur_page()->graph == GR_SONG; }
 
 /* black key place p (seq.c key_place) held, 0 = not */

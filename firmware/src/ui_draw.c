@@ -973,6 +973,15 @@ static void draw_columns(void)
         }
         return;
     }
+    if (cur_page()->graph == GR_LAUNCH) {           /* SCOPE, DEST, COPY / CLEAR, WHEN (ui_input.c launch_knob) */
+        char tn[4] = {'T', (char)('1' + song.sel % NTRK), 0, 0};
+        fmt_int(val, (int32_t)ui.l_dest + 1);
+        draw_column(0, "SCOPE", ui.l_all ? "ALL" : tn, "", VAL(0u), -1, trk_icon(song.sel, 1));
+        draw_column(1, "DEST", val, "", VAL(1u), -1, ICON_AUTO);
+        draw_column(2, "DO", "CP/CL", "", song.playing ? T_DIM : VAL(2u), -1, ICON_AUTO);
+        draw_column(3, "WHEN", ui.l_now ? "NOW" : "BAR", "", VAL(3u), -1, ICON_AUTO);
+        return;
+    }
     if (cur_page()->graph == GR_SONG) {             /* SECTION, TRACK, its PAT (A..D, -), REPS (the section's) */
         uint32_t row = ui.song_row < CHAIN_ROWS ? ui.song_row : CHAIN_ROWS - 1u, k = ui.song_trk % NTRK, sl;
         int used = row < chain_config.count;

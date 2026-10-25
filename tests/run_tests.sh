@@ -279,6 +279,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "SEQ > STEP FX: a step's ROLL / STRCH / PTCH locks on KNOB 2..4, KNOB 1 the cursor (SLICE only for STRCH / PTCH, EDIT, playback)" "$OUT/stepfx_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/songsound_test" tests/songsound_test.c -lm
     run "SONG: each section plays its slots' sounds (engine, preset, values) as well as their patterns; STOP brings the own sounds back" "$OUT/songsound_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/pattern_test" tests/pattern_test.c -lm
+    run "PATTERNS: 16 per track (steps, sound, motion, timing), bar-quantised launch, copy, clear" "$OUT/pattern_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/rand_test" tests/rand_test.c -lm
     run "RAND: the ROLL page's KNOB 3 varies each pass live (steps drop, notes move, ROLL / STRCH / PTCH), put back at STOP" "$OUT/rand_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/seq155_test" tests/seq155_test.c -lm

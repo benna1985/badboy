@@ -1203,6 +1203,11 @@ static uint32_t graph_signature(void)
             h = (h ^ chord_last[song.sel].note[i]) * 16777619u;
         h ^= (uint32_t)t->engine * 389u;             /* (MONO and kits follow the sounding engine) */
     }
+    if (pg->graph == GR_LAUNCH) {
+        h ^= (uint32_t)t->pat * 40503u + (uint32_t)t->pat_q * 7919u + ui.l_all * 3571u + ui.l_now * 1299709u + ui.l_dest * 104729u;
+        for (i = 0; i < NPAT; i++)
+            h ^= (uint32_t)pbank[trk_index(t)][i].used << i;
+    }
     if (pg->graph == GR_SONG) {
         h ^= ui.song_row * 40503u + chain_config.count * 7919u + ui.song_trk * 3571u;
         h = fnv(h, chain_config.row, sizeof chain_config.row);
@@ -1558,6 +1563,30 @@ static void graph_events(void)
     }
 }
 /* project slots: the name (none: USED) / EMPTY, the selected one filled */
+/* GLO > LAUNCH: the selected track's 16 patterns as cells (8 x 2), the white keys' order: the one playing in the accent,
+ * the one queued for the next bar outlined in the theme, the stored ones raised, the empty ones dim */
+static void graph_launch(void)
+{
+    const track_t *t = TSEL;
+    uint32_t i, k = trk_index(t);
+    char b[12] = "T", u[8];
+    for (i = 0; i < NPAT; i++) {
+        int32_t x = 8 + (int32_t)(i % 8u) * 29, y = 10 + (int32_t)(i / 8u) * 38;
+        int cur = i == t->pat, que = t->pat_q && i + 1u == t->pat_q, used = pbank[k][i].used || cur;
+        uint16_t bg = cur ? T_ACCENT : used ? T_RAISE : T_SURF;
+        if (que)
+            cv_rrect(x - 1, y - 1, 29, 34, 5, T_THEME, T_SURF);
+        cv_rrect(x, y, 27, 32, 4, bg, que ? T_THEME : T_SURF);
+        fmt_int(u, (int32_t)i + 1);
+        cv_text_in(x, y + 9, 27, &AF_M, u, cur ? T_INK : used ? T_TEXT : T_DIM, bg);
+    }
+    b[1] = (char)('1' + k);
+    b[2] = 0;
+    str_cpy(b + 2, t->pat_q ? "  NEXT " : "", 12);
+    if (t->pat_q)
+        fmt_int(b + str_len(b), (int32_t)t->pat_q);
+    cv_text_on(10, 90, &AF_S, b, T_MID, T_SURF);
+}
 static void graph_slots(void)
 {
     uint32_t i;
@@ -2316,6 +2345,10 @@ static void draw_graph(void)
         case GR_SONG:
             cv_oy = 0;
             graph_song();
+            break;
+        case GR_LAUNCH:
+            cv_oy = 0;
+            graph_launch();
             break;
         case GR_PATS:
             cv_oy = 0;

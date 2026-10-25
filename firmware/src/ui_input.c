@@ -330,6 +330,7 @@ static uint32_t scale_leds(uint32_t *root)
 }
 
 static uint32_t song_leds(void);
+static uint32_t launch_leds(void);
 /* MENU > ANIM IDLE (1.2, Discussion #135): after IDLE_LEDS_MS without panel input (ui.c scrn.idle: a button or key
  * pressed or held, a knob turned; what SCREEN OFF counts) the LEDs play the idle animation (hal/fm1_led_anim.h
  * fm1_idle_level: a soft light drifting over the keys and back, the buttons breathing with it; the scan draws it,
@@ -363,7 +364,7 @@ static uint32_t key_leds(uint32_t *br)                 /* (*br: a layer's keys t
     if (br)
         *br = 0;
     c = name_on() && !ui.menu ? name_leds() : ui.layer ? layer_leds(br) : grid_on() ? grid_leds() :
-                 (fm1_in.notes & ~kb_layer) | play_leds() | step_leds() | (song_keys_on() ? song_leds() : 0u);
+                 (fm1_in.notes & ~kb_layer) | play_leds() | step_leds() | (song_keys_on() ? song_leds() : 0u) | (launch_on() ? launch_leds() : 0u);
 #if FELUCCA_SLICE
     if (!ui.layer && !ui.menu && !name_on() && slice_page_on())
         c |= slice_leds();                              /* SLICES: and the keys of the selected slice */
@@ -562,6 +563,78 @@ static void song_keys(uint32_t notes)
         chain_config.row[ui.song_row].slot[ui.song_trk % NTRK] = (uint8_t)s;
         ui.force = 1;
     }
+}
+/* LAUNCH (ui.c launch_on): pattern idx of the selected track, or of every track with SCOPE ALL, from the next bar (playing)
+ * or now (NOW; stopped: always). The irq is off while the bank moves: the ISR plays from the same arrays */
+static void launch_do(uint32_t idx)
+{
+    uint32_t k, a = ui.l_all ? 0u : song.sel, b = ui.l_all ? NTRK : song.sel + 1u;
+    char m[16] = "PAT ";
+    if (chain_busy()) {
+        ui_message("SONG PLAYING");
+        return;
+    }
+    for (k = a; k < b; k++) {
+        fm1_irq_off();
+        if (ui.l_now && song.playing)
+            pbank_switch(&trk[k], idx);
+        else
+            (void)pbank_launch(&trk[k], idx);
+        fm1_irq_on();
+    }
+    fmt_int(m + 4, (int32_t)idx + 1);
+    if (song.playing && !ui.l_now && trk[song.sel].pat_q)
+        str_cpy(m + str_len(m), " NEXT BAR", 10);
+    ui_message(m);
+    ui.force = 1;
+}
+static void launch_keys(uint32_t notes)
+{
+    uint32_t k;
+    for (k = 0; k < 27u; k++)
+        if (((notes >> k) & 1u) && !key_black(k) && key_place(k) < NPAT)
+            launch_do(key_place(k));
+}
+/* the key LEDs of LAUNCH: the pattern the selected track plays, and the one queued */
+static uint32_t launch_leds(void)
+{
+    uint32_t k, m = 0;
+    const track_t *t = TSEL;
+    for (k = 0; k < 27u; k++)
+        if (!key_black(k) && (key_place(k) == t->pat || (t->pat_q && key_place(k) + 1u == t->pat_q)))
+            m |= 1u << k;
+    return m;
+}
+/* LAUNCH's knobs: 1 SCOPE (T / ALL), 2 DEST, 3 right COPY the selected track's pattern playing to DEST, left CLEAR DEST,
+ * 4 WHEN (BAR / NOW) */
+static void launch_knob(uint32_t slot, int32_t steps)
+{
+    track_t *t = TSEL;
+    char m[20];
+    if (slot == 0u) {
+        ui.l_all = steps > 0;
+    } else if (slot == 1u) {
+        ui.l_dest = (uint8_t)clamp((int32_t)ui.l_dest + steps, 0, NPAT - 1);
+    } else if (slot == 2u) {
+        if (chain_busy() || song.playing) {
+            ui_message(chain_busy() ? "SONG PLAYING" : "STOP TO EDIT");
+            return;
+        }
+        if (steps > 0 && ui.l_dest != t->pat) {
+            pbank_copy(t, t->pat, ui.l_dest);
+            str_cpy(m, "COPIED TO ", 12);
+        } else if (steps < 0) {
+            pbank_clear(t, ui.l_dest);
+            str_cpy(m, "CLEARED ", 12);
+        } else {
+            return;
+        }
+        fmt_int(m + str_len(m), (int32_t)ui.l_dest + 1);
+        ui_message(m);
+    } else {
+        ui.l_now = steps > 0;
+    }
+    ui.force = 1;
 }
 /* the key LEDs of SONG: the key of the selected cell's slot (none for "-" and on + ADD) */
 static uint32_t song_leds(void)
@@ -1005,6 +1078,10 @@ static void edit_param(uint32_t slot, int32_t steps)
         ev_knob(slot, steps);
         return;
     }
+    if (pg->graph == GR_LAUNCH) {                     /* SCOPE, DEST, COPY / CLEAR, WHEN */
+        launch_knob(slot, steps);
+        return;
+    }
     if (pg->graph == GR_SONG) {                       /* KNOB 1 SECTION, 2 TRACK, 3 PAT (A..D, -), 4 REPS */
         chain_row_t *r;
         if (slot == 0u) {
@@ -1340,7 +1417,7 @@ static void presets_turn(int32_t s)
     }
     if (ui.home || g == GR_BROWSE) {
         preset_step(s);
-    } else if (g == GR_ROLL || g == GR_USER || g == GR_SLOTS || g == GR_PATS || g == GR_SONG || g == GR_EVENTS) {
+    } else if (g == GR_ROLL || g == GR_USER || g == GR_SLOTS || g == GR_PATS || g == GR_SONG || g == GR_EVENTS || g == GR_LAUNCH) {
         edit_param(0, s);                                 /* KNOB 1's (STEP: STOP TO EDIT while a song plays) */
         ui.hot_col = 0;
         ui.hot_t = 40;
@@ -1798,6 +1875,8 @@ static void ui_input(void)
     lock_keys();                                        /* (a grid key on a hit let go: the hit goes) */
     if (song.grid == 3u) {
         song_keys(notes);
+    } else if (song.grid == 4u) {
+        launch_keys(notes);
     } else if (song.grid) {
         grid_keys(notes);
     } else if (song.seq_mode && cur_page()->graph == GR_ROLL) {   /* STEP */
@@ -1859,7 +1938,7 @@ static void ui_input(void)
         }
         if (ui.home || pg->scope == SC_STEP || pg->scope == SC_TRK || page_desc(pg, k, &hv) ||
             ((pg->graph == GR_USER || pg->graph == GR_MOD || pg->graph == GR_PATS) && k == 0u)
-            || pg->graph == GR_SONG || (pg->graph == GR_SLICES && k < 2u) || fop_page(pg->graph)) {   /* (not an empty
+            || pg->graph == GR_SONG || pg->graph == GR_LAUNCH || (pg->graph == GR_SLICES && k < 2u) || fop_page(pg->graph)) {   /* (not an empty
                                                                                                           * column) */
             ui.hot_col = (uint8_t)k;
             ui.hot_t = 40;
