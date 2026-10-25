@@ -70,16 +70,24 @@ GENDIR = SRC / "build" / "genwav"
 CACHE = SRC / "build" / "gen_samples.cache"
 CC0 = SRC / "assets" / "samples-cc0"
 STABS = SRC / "assets" / "samples-stabs"
+BASS = SRC / "assets" / "samples-bass"       # the owner's bass samples: SETs after the stabs (see BASS_META)
 STAB_ROOT = 60                               # MIDI note a stab plays at its recorded pitch (middle C)
 STAB_KEEP = 0.8                              # longest stab kept (s)
 TR = 22050                                   # stored sample rate
+BASS_TR = 11025                              # a bass sample's stored rate (nothing above 5 kHz to keep; half the flash)
+BASS_META = {                                # NAME: (root MIDI note, "one" + longest kept (s) | "loop"); roots from the file names,
+    "808": (31, "one", 1.0), "808D": (31, "one", 1.0),   # the octave checked with YIN (tools: 808 G = G1 = 31)
+    "BASS1": (28, "loop"), "BASS2": (36, "one", 1.1), "REESD": (31, "loop"), "SUBA": (33, "loop"),
+    "BASS3": (33, "one", 0.33), "DONK": (29, "one", 0.33), "DRED": (36, "one", 0.8), "DREDR": (36, "one", 0.75),
+    "REESE": (36, "loop"), "SDROP": (31, "one", 1.2), "SFALL": (35, "one", 1.0)}
+BASS_ATTACK, BASS_LOOP = 0.12, 0.38          # a looped bass: the attack kept (s), then about this much looped
 
 # CC0 library: set -> kind ("oneshot" decaying, "sus" looped sustain, "kit" one sample per key)
-# Built-in sets (piano, flute, sax); the other slots of the 8 are for the user (USR1-3, loaded
-# from the web editor). TRANH was removed (66 KB of flash); its index 1 stays, an alias of PIANO
+# Built-in sets (piano, flute; SAX was removed for the bass samples' flash: its index 3 stays, an alias of PIANO
+# like 1 and 4); the other slots of the 8 are for the user (USR1-3, loaded from the web editor). TRANH was removed (66 KB of flash); its index 1 stays, an alias of PIANO
 # ("alias": the set named). PERC (the GM kit) was removed (66 KB); its index 4 stays, an alias of
 # PIANO too (PERC_SLOT; its sounds load as the DRUM engine)
-CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("FLUTE", "sus"), ("SAX", "sus"), ("PIANO", "alias")]
+CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("FLUTE", "sus"), ("PIANO", "alias"), ("PIANO", "alias")]
 PERC_SLOT = 4                                # core.h SMP_SET_PERC: SAMPLE's factory presets end before it
 MEASURED_TUNING = ()                         # sets whose recordings are not at A440 (was TRANH, ~+35 ct)
 
@@ -106,7 +114,8 @@ SLC_PIANO_NOTE = 60                          # SLICE's SRC PIANO: the PIANO zone
 SLC_GRID, SLC_AUTO = 128, 32                # eng_slice.c slc_src_t
 
 ENV = {"wave":(5, 80, 100, 50), "kit": (0, 127, 127, 60), "multi": (0, 85, 0, 75),
-       "oneshot": (0, 127, 127, 70), "sus": (12, 80, 120, 60), "stab": (0, 127, 127, 40)}
+       "oneshot": (0, 127, 127, 70), "sus": (12, 80, 120, 60), "stab": (0, 127, 127, 40),
+       "bass": (0, 127, 127, 40)}
 
 # PIANO's notes cut to 0.75 s (saves flash), faded out over the last SET_FADE s
 SET_KEEP = {"PIANO": 0.75}
@@ -214,6 +223,53 @@ def stab_sample(path):
         x[n - fade + i] *= 1 - i / fade
     pk = peak(x)
     return [int(v * 30000 / pk) for v in x]
+
+
+def bass_files():
+    """-> [(SET name, path)] of assets/samples-bass/NN_NAME.wav in order (NAME is a key of BASS_META)"""
+    out = []
+    for p in sorted(BASS.glob("*.wav")):
+        m = re.fullmatch(r"\d+_([A-Za-z0-9+-]{1,5})", p.stem)
+        if not m or m.group(1).upper() not in BASS_META:
+            raise SystemExit(f"{p}: a bass file is NN_NAME.wav with a NAME of BASS_META")
+        out.append((m.group(1).upper(), p))
+    return out
+
+
+def bass_sample(name, path):
+    """one bass at BASS_TR from its onset: a one-shot cut to its length with a fade-out, or a short attack and a seamless
+    crossfaded loop (the best matching end of about BASS_LOOP s) -> (int16 samples, (loop start, loop end) or None)"""
+    meta = BASS_META[name]
+    sr, x = wav(path)
+    x = resample(x[max(0, onset(x) - 16):], sr, BASS_TR)
+    if meta[1] == "one":
+        x = x[:int(meta[2] * BASS_TR)]
+        n = len(x)
+        fade = min(n // 3, int((0.15 if n > 0.5 * BASS_TR else 0.03) * BASS_TR))
+        for i in range(fade):
+            x[n - fade + i] *= 0.5 + 0.5 * math.cos(math.pi * (i + 1) / fade)
+        loop = None
+    else:
+        xf, win = int(0.04 * BASS_TR), 48
+        best = None
+        for ls in range(int(BASS_ATTACK * BASS_TR), int((BASS_ATTACK + 0.12) * BASS_TR), 4):
+            for ln in range(int((BASS_LOOP - 0.08) * BASS_TR), int((BASS_LOOP + 0.08) * BASS_TR), 2):
+                le = ls + ln
+                if le + win >= len(x):
+                    continue
+                err = sum((x[ls + i] - x[le + i]) ** 2 + 4 * ((x[ls + i + 1] - x[ls + i]) - (x[le + i + 1] - x[le + i])) ** 2
+                          for i in range(0, win, 3))
+                if best is None or err < best[0]:
+                    best = (err, ls, le)
+        _, ls, le = best
+        x = x[:le]                                   # the data ends where the loop does
+        n = len(x)
+        for i in range(xf):                          # the end fades into the samples before the loop start
+            a = (i + 1) / xf
+            x[n - xf + i] = x[n - xf + i] * (1 - a) + x[ls - xf + i] * a
+        loop = (ls, n - 1)
+    pk = peak(x)
+    return [int(v * 30000 / pk) for v in x], loop
 
 
 def gm_role(name):
@@ -358,6 +414,15 @@ class Builder:
                                 key=KIT_BASE + k if kind == "kit" else None))
         self.add_set(name, kind, entries)
 
+    def bass_set(self, name, path):
+        """a bass: one zone over the whole keyboard (0..127) at its root, looped (sustained) or a one-shot"""
+        smp, loop = bass_sample(name, path)
+        ls, le = loop if loop else (len(smp), len(smp))
+        off, st = self.add(smp, ls)
+        self.add_set(name, "bass", [dict(off=off, n=len(smp), ls=ls, le=le, looped=bool(loop), sr=BASS_TR,
+                                         root16=BASS_META[name][0] * 16, pred=st[0], idx=st[1], key=None)])
+        self.nstab = getattr(self, "nstab", 0) + 1
+
     def stab_set(self, name, path):
         """a rave stab: one one-shot zone over the whole keyboard (key range 0..127), root STAB_ROOT"""
         s = stab_sample(path)
@@ -455,6 +520,11 @@ class Builder:
         return f"samples: {len(self.sets)} sets, {len(self.zones)} zones, {len(self.blob)} B ADPCM{brk}"
 
 
+def break_on():
+    """SLICE's own synthesized BREAK (SRC 0): off since the bass samples took its flash (FELUCCA_BREAK=1 builds it)"""
+    return os.environ.get("FELUCCA_BREAK", "0") == "1"
+
+
 def slice_on():
     """the SLICE engine is built (src/core.h: on unless FELUCCA_SLICE=0)"""
     return os.environ.get("FELUCCA_SLICE", "1") != "0"
@@ -466,10 +536,10 @@ def input_key(have_cc0):
     here = Path(__file__).resolve().parent
     for p in (here / "gen_samples.py", here / "sampleio.py"):
         h.update(p.read_bytes())
-    h.update(repr((sys.version_info[:2], have_cc0, slice_on())).encode())   # sum() differs across versions
+    h.update(repr((sys.version_info[:2], have_cc0, slice_on(), break_on())).encode())   # sum() differs across versions
     files = sorted(GENDIR.glob("*.wav"))
     if have_cc0:
-        files += sorted(CC0.glob("*/*.wav")) + sorted(STABS.glob("*.wav"))
+        files += sorted(CC0.glob("*/*.wav")) + sorted(STABS.glob("*.wav")) + sorted(BASS.glob("*.wav"))
     for p in files:
         h.update(str(p.relative_to(SRC)).encode() + b"\0")
         h.update(hashlib.sha256(p.read_bytes()).digest())
@@ -499,8 +569,11 @@ def main(out):
                 b.cc0_set(name, kind)
         for name, path in stab_files():             # after every CC0 set; before USR1..: the SET list's tail
             b.stab_set(name, path)
+        for name, path in bass_files():             # then the bass samples
+            b.bass_set(name, path)
     if slice_on():                                  # SLICE's BREAK: only when that engine is built
-        b.slice_break()                             # last: the sets' offsets stay as they were
+        if break_on():
+            b.slice_break()                         # last: the sets' offsets stay as they were
         b.slice_piano()                             # (no data of its own: the PIANO set's)
     text = b.header()
     Path(out).write_text(text)

@@ -557,7 +557,8 @@ int main(int argc, char **argv)
         voice_t *v;
         uint32_t a, b, st, ok = 1;
         host_tracks_init();
-        host_preset(t, SLC_ENG, 0);                              /* BREAK 16 */
+        host_preset(t, SLC_ENG, 0);                              /* BREAK 16 (the factory preset is on USR1 now) */
+        t->p[P_E0] = 0;
         trk_note_on(t, 65, 100);
         v = voice_of(t, 65);
         slc_bounds(&SLC_BREAK, 2, 5, &a, &b, &st);
@@ -601,6 +602,7 @@ int main(int argc, char **argv)
             uint32_t held, after, k;
             host_tracks_init();
             host_preset(t, SLC_ENG, 0);
+            t->p[P_E0] = 0;
             t->p[P_E4] = (int16_t)m;
             t->p[P_REL] = 10;
             trk_note_on(t, 60, 100);

@@ -190,11 +190,12 @@ int main(int argc, char **argv)
         const smp_set_t *s = &SMP_SETS[0];
         const smp_zone_t *z = &SMP_ZONES[s->z0];
         uint32_t bytes = 0, ok = s->nz == 5u;
-        check("PIANO: SET 0, its aliases 1 and 4 the same zones; FLUTE 2, SAX 3, USR1..3 5..7; 4 presets",
-              SMP_NSETS == 21u && str_eq(SMP_SETS[0].name, "PIANO") && SMP_SETS[1].z0 == s->z0 && SMP_SETS[4].z0 == s->z0 &&
-              SMP_SETS[1].nz == s->nz && SMP_SETS[4].nz == s->nz && str_eq(SMP_SETS[2].name, "FLUTE") &&
-              str_eq(SMP_SETS[3].name, "SAX") && str_eq(SMP_ALL_NAMES[21], "USR1") && ENG_SAMPLE.edit[0].max == 26 && str_eq(SMP_ALL_NAMES[26], "USR6") &&
-              ENG_SAMPLE.npresets == 21u);
+        check("PIANO: SET 0, its aliases 1, 3 and 4 the same zones; FLUTE 2, the 13 basses 21..33, USR1..6 34..39",
+              SMP_NSETS == 34u && str_eq(SMP_SETS[0].name, "PIANO") && SMP_SETS[1].z0 == s->z0 && SMP_SETS[4].z0 == s->z0 &&
+              SMP_SETS[3].z0 == s->z0 && SMP_SETS[1].nz == s->nz && SMP_SETS[4].nz == s->nz && SMP_SETS[3].nz == s->nz &&
+              str_eq(SMP_SETS[2].name, "FLUTE") && str_eq(SMP_SETS[21].name, "808") && str_eq(SMP_SETS[33].name, "SFALL") &&
+              str_eq(SMP_ALL_NAMES[34], "USR1") && ENG_SAMPLE.edit[0].max == 39 && str_eq(SMP_ALL_NAMES[39], "USR6") &&
+              ENG_SAMPLE.npresets == 34u);
         for (i = 0; ok && i < 5u; i++) {
             bytes += (z[i].n + 1u) / 2u;
             ok &= z[i].rate == 32768u && z[i].root16 == ROOT[i] * 16u && z[i].lo == LO[i] && z[i].hi == HI[i] &&
@@ -221,6 +222,33 @@ int main(int argc, char **argv)
         render(8u, 0, 60, 0, &zone);
         check("PIANO: GRAIN SRC 0 takes its zones (the middle C zone for note 60, not the sine)",
               zone == 2 && rms(FS / 2u, FS) > 100.0);
+    }
+
+    /* 1b: the 13 basses (SETs 21..33): one zone over the whole keyboard at 11,025 Hz; four loop, the others are one-shots */
+    {
+        static const char *const NM[13] = {"808", "808D", "BASS1", "BASS2", "REESD", "SUBA", "BASS3", "DONK", "DRED", "DREDR", "REESE", "SDROP", "SFALL"};
+        static const uint8_t ROOT[13] = {31, 31, 28, 36, 31, 33, 33, 29, 36, 36, 36, 31, 35}, LOOP[13] = {0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0};
+        uint32_t k, ok = 1, snd = 1, loops = 1, ends = 1, ended;
+        for (k = 0; k < 13u; k++) {
+            const smp_set_t *b = &SMP_SETS[21u + k];
+            const smp_zone_t *z = &SMP_ZONES[b->z0];
+            int32_t pk = 0, tail = 0, zn;
+            uint32_t j;
+            ok &= str_eq(b->name, NM[k]) && b->nz == 1u && z->rate == 16384u && z->root16 == ROOT[k] * 16u && z->lo == 0 &&
+                  z->hi == 127 && (z->looped != 0) == LOOP[k] && z->n > 2000u && z->n < 14000u && (!LOOP[k] || (z->ls < z->le && z->le == z->n - 1u));
+            render(ENGI_SAMPLE, (int16_t)(21 + k), ROOT[k], &ended, &zn);
+            for (j = 0; j < FS / 4u; j++)
+                pk = abs(buf[j]) > pk ? abs(buf[j]) : pk;
+            for (j = FS * SECS - FS / 4u; j < FS * SECS; j++)
+                tail = abs(buf[j]) > tail ? abs(buf[j]) : tail;
+            snd &= pk > 4000;
+            if (LOOP[k]) loops &= ended == 0u && tail > 1500;        /* a loop sustains for as long as the key is held */
+            else ends &= ended != 0u && tail < 100;                    /* a one-shot ends on its own */
+            if (!(pk > 4000 && (LOOP[k] ? ended == 0u && tail > 1500 : ended != 0u && tail < 100)))
+                printf("bass %s: peak %d, ended %u, tail %d\n", NM[k], pk, ended, tail);
+        }
+        check("BASS sets 21..33: names, one zone each over the whole keyboard at 11,025 Hz, the roots of their names, 4 looped", ok);
+        check("  each sounds at its root; the loops sustain 2 s, the one-shots end on their own", snd && loops && ends);
     }
 
     /* 2: SLICE's PIANO, SAMPLE PIANO's middle C zone itself */

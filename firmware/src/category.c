@@ -24,8 +24,8 @@ static const char *const PRESET_CAT[16] = {
     "",                          /* 1 DIGITAL (retired) */
     "LKPLUU",                    /* 2 PHASE: BRASS, ORGAN, STRING, RESO, BELL, WIRE */
     "LBLLL",                     /* 3 LOFI: PULSE LD, WAVE BASS, ARP 8BIT, WAVE LEAD, STEP LEAD */
-    "KKLLOLLLLLLLLLLLLLLLL",     /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, SAX, (PIANO: PERC's alias), then the
-                                  * 16 rave stabs: AWSM3 .. WILD1 (LEAD) */
+    "KKLLOLLLLLLLLLLLLLLLLBBBBBBBBBBBBB", /* 4 SAMPLE: PIANO, (PIANO: the retired TRANH's alias), FLUTE, (PIANO: the retired SAX's alias),
+                                  * (PIANO: PERC's alias), then the 16 rave stabs: AWSM3 .. WILD1 (LEAD), then the 13 basses (BASS) */
     "PLBF",                      /* 5 VOICE: CHOIR AAH, VOX LEAD, WOW BASS, WHISPER */
     "BLLUP",                     /* 6 TRIO: FAT BASS, ARP LEAD, SYNC LEAD, RING BELL, CHIP CHOIR */
     "KKKKK",                     /* 7 WHEEL: the organs */

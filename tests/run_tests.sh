@@ -435,7 +435,11 @@ if [ -f build/gen/felucca_tables.h ]; then
         mkdir -p build/slice_demo
         python3 tests/slice_loop.py build/slice_demo/loop
         python3 tools/fm1_sample_upload.py build LOOP build/slice_demo/loop build/slice_demo/loop.wav:60 >/dev/null
-        $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/slice_test" tests/slice_test.c -lm
+        # the built-in BREAK (SRC 0) is off in the firmware (its flash went to the basses): these two tests use it as material, from a
+        # header made with FELUCCA_BREAK=1 (build/gen_break, first on the include path; the rest as build/gen)
+        mkdir -p build/gen_break
+        FELUCCA_BREAK=1 python3 -I tools/gen_samples.py build/gen_break/felucca_samples.h >/dev/null || fail=1
+        $CC -O2 -w -Ibuild/gen_break -Ibuild/gen -Ifirmware/src -o "$OUT/slice_test" tests/slice_test.c -lm
         run "SLICE: tables, onsets, reverse, keys, modes, MAN slices and their store, demos" "$OUT/slice_test" \
             build/slice_demo/loop build/slice_demo
     else
@@ -446,7 +450,7 @@ if [ -f build/gen/felucca_tables.h ]; then
     if grep -q '^    {"PIANO", 0, 5},' build/gen/felucca_samples.h; then
         mkdir -p build/sample_demo build/piano_hd
         python3 tools/gen_samples.py --user-slot PIANO "PIANO HD" build/piano_hd/PIANO_HD >/dev/null
-        $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/sample_test" tests/sample_test.c -lm
+        $CC -O2 -w -Ibuild/gen_break -Ibuild/gen -Ifirmware/src -o "$OUT/sample_test" tests/sample_test.c -lm
         run "SAMPLE: PIANO (5 zones as 1.1.5: splits, pitch, length, GRAIN), SLICE's PIANO, a PIANO HD slot" "$OUT/sample_test" \
             build/piano_hd/PIANO_HD build/sample_demo
     else

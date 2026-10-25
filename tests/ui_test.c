@@ -488,10 +488,11 @@ static int test_sound_loads(void)
     project_load(1);
     bad += check("a project load drops the copy and takes none", undo.trk == 0 && undo_depth == 0);
     ui_power_on();
-    bad += check("SAMPLE factory browsing: PIANO FLUTE SAX, then the 16 rave stabs (the aliases 1 and 4 hidden)",
-                 ENGINES[4]->npresets == 21u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
-                 str_eq(ENGINES[4]->presets[3].name, "SAX") && str_eq(ENGINES[4]->presets[5].name, "AWSM3") &&
-                 str_eq(ENGINES[4]->presets[20].name, "WILD1") && SMP_NALIAS == 2);
+    bad += check("SAMPLE factory browsing: PIANO FLUTE, then the 16 rave stabs and the 13 basses (the aliases 1, 3 and 4 hidden)",
+                 ENGINES[4]->npresets == 34u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
+                 str_eq(ENGINES[4]->presets[3].name, "PIANO") && str_eq(ENGINES[4]->presets[5].name, "AWSM3") &&
+                 str_eq(ENGINES[4]->presets[20].name, "WILD1") && str_eq(ENGINES[4]->presets[21].name, "808") &&
+                 str_eq(ENGINES[4]->presets[33].name, "SFALL") && SMP_NALIAS == 3);
     {   /* TRANH (SET 1, preset 1) is gone: both are PIANO aliases, kept for old data, never offered */
         const param_desc_t *sd = &ENGINES[4]->edit[0];
         uint32_t all, pos, k, e, pos0, shown = 0;
@@ -507,14 +508,14 @@ static int test_sound_loads(void)
         apply_preset_to(TSEL, 1);
         bad += check("SAMPLE: old SET 1 / preset 1 (TRANH) play PIANO; browsing and knobs skip them",
                      SMP_SETS[1].z0 == SMP_SETS[0].z0 && SMP_SETS[1].nz == SMP_SETS[0].nz && pos == pos0 &&
-                     shown == 19u && e == 4u && k == 2u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&
+                     shown == 31u && e == 4u && k == 2u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&
                      str_eq(sd->names[1], "PIANO") && enum_step(sd, 0, 1) == 2 && enum_step(sd, 2, 1) == 0 &&
                      enum_step(sd, 1, 2) == 2 && enum_orig(sd, 1) == 0 && enum_orig(sd, 5) == 5 &&
                      enum_orig(&ENGINES[8]->edit[0], 1) == 0);
-        bad += check("SAMPLE / GRAIN SET 4 (PERC, retired): a PIANO alias, knobs skip it, USR1..6 follow the 16 stabs at 21..26",
+        bad += check("SAMPLE / GRAIN SET 4 (PERC, retired): a PIANO alias, knobs skip it, USR1..6 follow the 16 stabs and 13 basses at 34..39",
                      str_eq(sd->names[SMP_SET_PERC], "PIANO") && enum_orig(sd, SMP_SET_PERC) == 0 &&
-                     enum_step(sd, 3, 4) == 5 && enum_step(sd, 5, 4) == 3 && str_eq(sd->names[21], "USR1") &&
-                     str_eq(sd->names[23], "USR3") && str_eq(sd->names[24], "USR4") && str_eq(sd->names[26], "USR6") && sd->max == 26 &&
+                     enum_step(sd, 2, 3) == 5 && enum_step(sd, 5, 4) == 2 && str_eq(sd->names[34], "USR1") &&
+                     str_eq(sd->names[36], "USR3") && str_eq(sd->names[37], "USR4") && str_eq(sd->names[39], "USR6") && sd->max == 39 &&
                      enum_orig(&ENGINES[8]->edit[0], SMP_SET_PERC) == 0 && SMP_SETS[SMP_SET_PERC].z0 == SMP_SETS[0].z0);
     }
     host_legacy_sample_perc(t);                /* SAMPLE PERC (SET 4, retired after 1.0.2): every load gives DRUM */
@@ -1436,8 +1437,8 @@ static int test_categories(void)
     turn(EN_K4, 1);
     pos = preset_pos(&total);
     for (n = 0, e = 0; e < NENGINES; e++)
-        for (k = 0; eng_ok(e) && k < preset_shown(e); k++)
-            n += preset_cat(e, k) == CAT_BASS;
+        for (k = 0; eng_ok(e) && k < ENGINES[e]->npresets; k++)        /* (the shown ones: not a retired alias) */
+            n += preset_orig(ENGINES[e], k) == k && preset_cat(e, k) == CAT_BASS;
     bad += check("  KNOB 4: ALL, FAV, then BASS: the list holds the factory basses only, the sound not loaded",
                  list_mode() == 2u && str_eq(list_name(list_mode()), "BASS") && !favorites.filter && ui_lcat == CAT_BASS &&
                  total == n && n >= 6u && pos == total && TSEL->eng_req == 0u && TSEL->preset == 0u);
@@ -3750,14 +3751,15 @@ static int test_slices(void)
     int bad = 0, ok;
     uint32_t n, j, p0, k, note;
     ui_power_on();
-    set_engine_of(TSEL, 13u);                        /* SLICE CHOP: BREAK, 16 */
+    set_engine_of(TSEL, 13u);                        /* SLICE CHOP: USR1, 16 */
+    TSEL->p[P_E0] = SLC_SRC_PIANO;                   /* a built-in source, 16 slices (no BREAK any more: the bass samples have its flash) */
     bad += check("SLICES: SLICE's EDIT cycle EDIT 1 EDIT 2 SLICES VOICE VOICE 2 VOICE 3 EDIT 1", engine_cycle(CYC_S, NELEM(CYC_S)));
     go_page(GR_SLICES); frame();
     n = slice_count();
     p0 = TSEL->p[P_E1];
     turn(EN_K1, 2); turn(EN_K2, 3);
     ok = n == 16u && slice_sel() == 2u && TSEL->p[P_E1] == p0 && msg_is("SRC USR1-6 TO EDIT") && !slice_act_ready(2);
-    bad += check("SLICES on BREAK: its 16 slices shown, KNOB 1 picks; edits need USR1-3 (DIV unchanged)", ok);
+    bad += check("SLICES on PIANO: its 16 slices shown, KNOB 1 picks; edits need USR1-3 (DIV unchanged)", ok);
     TSEL->p[P_E0] = 2;                               /* SRC USR2, empty: no slices (a sine plays): NO SAMPLE */
     frame();
     ok = slice_count() == 0u && (msg_is(MSG_NO_SAMPLE) || str_eq(ui.msg2, MSG_NO_SAMPLE));
@@ -4079,7 +4081,7 @@ static int test_quick_layers(void)
         ok = TSEL->preset == 2u && user_of(TSEL) >= UP_SLOTS;
         c1 = eng_list_pos(&tot);
         turn(EN_K2, 1);
-        ok &= TSEL->preset == 3u;
+        ok &= TSEL->preset == 5u;                       /* (3 is SAX's alias: the first stab) */
         c2 = eng_list_pos(&tot);
         ok &= c0 == 0u && c1 == 1u && c2 == 2u && tot >= SMP_NPRESETS - SMP_NALIAS;
         apply_preset(0);
@@ -4097,7 +4099,7 @@ static int test_quick_layers(void)
         }
         ok &= seen == (1u << tot) - 1u && TSEL->preset == 0u && !alias;
         btn_up(B_EDIT); frame();
-        bad += check("  #124 SAMPLE: KNOB 2 right PIANO, FLUTE, SAX (No. 1 2 3), both ways round the list, never the alias", ok);
+        bad += check("  #124 SAMPLE: KNOB 2 right PIANO, FLUTE, AWSM3 (No. 1 2 3), both ways round the list, never the alias", ok);
     }
     song.playing = 0;
     lay_combo(B_EDIT, white(LY_INIT));
