@@ -220,6 +220,7 @@ static void rec_release(track_t *t, uint32_t note);
 static int rec_on(const track_t *t) { return ((song.rec >> trk_index(t)) & 1u) && song.playing && !chain.running; }
 
 #include "motion.c"
+#include "pbank.c"                 /* the pattern bank: 16 patterns per track (1.6) */
 
 /* the ARP's modes (P_AMODE). Append-only: a stored value keeps its meaning. ORD (1.2, it played as UP before) plays
  * the held notes in the order they were pressed, whatever ARP 2's ORD switch says (that switch orders the list of the
@@ -858,6 +859,7 @@ static void seq_stop(void)
 {
     uint32_t i;
     song.playing = 0;
+    pbank_stop();                                    /* a queued pattern happens now */
     cin_left = 0;                                  /* (a count-in: cancelled, nothing recorded) */
     cin_flush = 0;
     memset(cin_n, 0, sizeof cin_n);
@@ -1546,6 +1548,8 @@ static void events_block(uint32_t n)
         beat_pos -= beat_samples();
         beat_pos = beat_pos < beat_samples() ? beat_pos : 0u;
         beat_n = (beat_n + 1u) & 3u;
+        if (!beat_n && song.playing)
+            pbank_bar();                                    /* a bar line: the launched patterns start */
     }
     if (song.playing)
         song.tick++;

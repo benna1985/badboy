@@ -284,7 +284,8 @@ typedef struct track {
     int8_t rnd_off;              /* RAND: the semitones the playing step is moved by (seq.c seq_rand), 0 = none */
     uint8_t rnd_on;              /* RAND FX: the ROLL / STRCH / PTCH of the step were replaced (restored at the next step) */
     int8_t rnd_b[3], rnd_s[3];   /* .. their values before and the ones set */
-    uint8_t rnd_pad[7];          /* (track_t stays a multiple of 16 bytes) */
+    uint8_t pat, pat_q;          /* pattern bank (pbank.c): the pattern loaded (0..15), the one queued for the next bar + 1 (0: none) */
+    uint8_t rnd_pad[5];          /* (track_t stays a multiple of 16 bytes) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
     uint32_t seq_off;
     uint8_t seq_active;          /* any step programmed */
