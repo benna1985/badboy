@@ -823,7 +823,7 @@ FUN10 of 113 loads by count (RAND OFF), and older firmware refuses one of 114 as
 
 | id | label | values |
 | --- | --- | --- |
-| 105 | `RAND` | enum OFF, then S N SN F SF NF SNF at three levels (S1 S2 S3 N1 .. SNF3), default OFF: 22 values. The pattern is kept as written and each pass is varied as it plays: S = steps drop out, N = a step's notes move together by a few semitones (onto the scale), F = ROLL gets a rate and, on a SLICE track, STRCH (when on) wanders and PTCH shifts. The level is the chance a step is varied: 1 25 %, 2 55 %, 3 90 % (S drops at 60 % of it). A step's own ROLL / STRCH / PTCH lock wins over F. The values are put back at the next step and at STOP. On the device: SEQ > ROLL, KNOB 3 |
+| 105 | `RAND` | 0..127, default 0: AMOUNT x 8 + WHAT. WHAT (bits 0..2): 1 STEPS, 2 NOTES, 4 FX, or the sum (0 = OFF: the pattern as written). AMOUNT (bits 3..6, 0..15) is the chance a step is varied, AMOUNT x 100 / 15 %. The pattern is kept as written and each pass is varied as it plays: STEPS drop out (at 60 % of the chance), NOTES of a step move together by a few semitones (onto the scale), FX gives ROLL a rate and, on a SLICE track, wanders STRCH (when on) and shifts PTCH. A step's own ROLL / STRCH / PTCH lock wins over FX. The values are put back at the next step and at STOP. On the device: SEQ > RAND, KNOB 1 WHAT, KNOB 2 AMOUNT |
 
 Not lockable or recordable as motion.
 

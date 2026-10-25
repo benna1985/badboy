@@ -106,17 +106,19 @@ static int page_cycle(void)
     press(B_SEQ); frames(320);
     ok &= str_eq(cur_page()->title, "STEP FX") && !detail_on() && fx_on() && ui.cursor == 4u;
     press(B_SEQ); frames(320);
+    ok &= str_eq(cur_page()->title, "RAND") && rand_on() && !fx_on();
+    press(B_SEQ); frames(320);
     ok &= cur_page()->graph == GR_EVENTS && !detail_on();
     press(B_SEQ); frames(320);
     ok &= str_eq(cur_page()->title, "ROLL") && !detail_on();
     press(B_SEQ); frames(320);
     ok &= str_eq(cur_page()->title, "STEP") && !detail_on();
-    bad += check("SEQ: STEP -> DETAIL (the same cursor) -> STEP FX -> AUTOMATION -> ROLL -> STEP", ok);
+    bad += check("SEQ: STEP -> DETAIL (the same cursor) -> STEP FX -> RAND -> AUTOMATION -> ROLL -> STEP", ok);
     go_detail();
     {
         char ti[20];
         page_title(ti);
-        ok = str_eq(ti, "DETAIL 2/5");
+        ok = str_eq(ti, "DETAIL 2/6");
     }
     ok &= help_page() && str_eq(help_page(), "[PRESETS]STEP[K1]CHANCE, 1:4, FILL");
     bad += check("  its footer title DETAIL 2/4 (not the scale), its HELP hint", ok);

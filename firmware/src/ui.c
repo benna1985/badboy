@@ -604,6 +604,12 @@ static int fx_on(void)
 {
     return !ui.home && !ui.menu && !ui.confirm && cur_page()->scope == SC_STEP && str_eq(cur_page()->title, "STEP FX");
 }
+/* SEQ > RAND: KNOB 1 WHAT varies (OFF, STEPS, NOTES, ST+NT, FX, ST+FX, NT+FX, ALL), KNOB 2 the AMOUNT (0..15 of the full
+ * chance); both in the one track parameter P_RND = AMOUNT x 8 + WHAT (a FUN10 has room for one: project.c) */
+static int rand_on(void)
+{
+    return !ui.home && !ui.menu && !ui.confirm && cur_page()->scope == SC_STEP && str_eq(cur_page()->title, "RAND");
+}
 static uint32_t fx_id(uint32_t k)
 {
     if (k == 1u)

@@ -1189,6 +1189,16 @@ static void draw_columns(void)
         draw_column(3, "AMT", val, unit, a ? VAL(3u) : T_DIM, RATIO(&TP[id + 2u], a), mod_src_icon(MS_OFF));
         return;
     }
+    if (rand_on()) {                                    /* RAND: WHAT and AMOUNT of the live random variation (seq.c seq_rand) */
+        static const char *const WHAT[8] = {"OFF", "STEPS", "NOTES", "ST+NT", "FX", "ST+FX", "NT+FX", "ALL"};
+        uint32_t v = (uint32_t)clamp(TSEL->p[P_RND], 0, 127), w = v & 7u, a = v >> 3;
+        draw_column(0, "WHAT", WHAT[w], "", w ? VAL(0u) : T_DIM, (int32_t)w * 1000 / 7, ICON_AUTO);
+        fmt_int(val, (int32_t)(a * 100u / 15u));
+        draw_column(1, "AMOUNT", val, "%", w ? VAL(1u) : T_DIM, (int32_t)a * 1000 / 15, ICON_AUTO);
+        draw_column(2, "", "", "", T_THEME, -1, ICON_AUTO);
+        draw_column(3, "", "", "", T_THEME, -1, ICON_AUTO);
+        return;
+    }
     if (fx_on()) {                                      /* STEP FX: the cursor step, its ROLL / STRCH / PTCH (locked: bright) */
         char sn[8], sl[8];
         fmt_int(sn, (int32_t)ui.cursor + 1);

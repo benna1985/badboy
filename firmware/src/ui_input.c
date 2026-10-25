@@ -714,7 +714,7 @@ static uint64_t lock_held(void)
     uint32_t k, len = (uint32_t)t->p[P_SLEN], keys = fm1_in.notes & ~kb_layer;
     uint64_t m = 0;
     if (ui.home || ui.menu || ui.confirm || ui.layer || name_on() || !song.seq_mode || cur_page()->graph != GR_ROLL ||
-        !keys || detail_on() || fx_on())                /* (DETAIL: its knobs are the step's own fields, sd_turn) */
+        !keys || detail_on() || fx_on() || rand_on())   /* (DETAIL: its knobs are the step's own fields, sd_turn) */
         return 0;
     if (!grid_on())                                     /* the roll: the step being entered */
         return ui.entry_open && !live_rec_sel() && ui.cursor < len ? (uint64_t)1 << ui.cursor : 0u;
@@ -779,6 +779,22 @@ static void fx_turn(uint32_t slot, int32_t steps)
         cursor_move(ui.cursor + steps);
     else
         lock_apply(fx_id(slot), slot, steps, (uint64_t)1 << ui.cursor);
+}
+/* SEQ > RAND (ui.c rand_on): KNOB 1 WHAT, KNOB 2 AMOUNT, packed in P_RND. From OFF, WHAT starts at a middle AMOUNT */
+static void rand_turn(uint32_t slot, int32_t steps)
+{
+    track_t *t = TSEL;
+    int32_t v = clamp(t->p[P_RND], 0, 127), what = v & 7, amt = v >> 3;
+    if (slot == 0u) {
+        if (!what && steps > 0 && !amt)
+            amt = 8;
+        what = clamp(what + steps, 0, 7);
+    } else if (slot == 1u) {
+        amt = clamp(amt + steps, 0, 15);
+    } else {
+        return;
+    }
+    t->p[P_RND] = (int16_t)(amt << 3 | what);
 }
 /* STEP FX's EDIT: the cursor step's three locks go (its other locks stay) */
 static void fx_reset(void)
@@ -922,6 +938,10 @@ static void step_edit(uint32_t slot, int32_t steps)
 {
     step_t *st = &TSEL->step[ui.cursor];
     uint32_t i;
+    if (rand_on()) {                                      /* RAND: WHAT, AMOUNT */
+        rand_turn(slot, steps);
+        return;
+    }
     if (fx_on()) {                                        /* STEP FX: the step, ROLL, STRCH, PTCH */
         follow_hold();
         fx_turn(slot, steps);
@@ -1307,7 +1327,7 @@ static void presets_turn(int32_t s)
     const page_t *pg = cur_page();
     uint32_t g = pg->graph;
     uint64_t held = lock_held();
-    if (detail_on() || fx_on()) {                         /* DETAIL (1.5.1): the cursor (its KNOB 1 is CHANCE) */
+    if (detail_on() || fx_on() || rand_on()) {                         /* DETAIL (1.5.1): the cursor (its KNOB 1 is CHANCE) */
         if (chain_busy())
             ui_message("STOP TO EDIT");
         else

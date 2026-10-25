@@ -20,11 +20,6 @@ static const char *const N_SCALE[] = {"CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", 
 static const char *const N_ONOFF[] = {"OFF", "ON"};
 /* ANALOG's filter TYPE (1.5, #104; eng_analog.c): the SVF's low-pass (as always), band-pass, high-pass output */
 static const char *const N_FTYPE[] = {"LP", "BP", "HP"};
-/* RAND (seq.c seq_rand): OFF, then S N SN F SF NF SNF (STEPS, NOTES, FX that vary) each at 1 2 3 (25, 55, 90 %):
- * value v >= 1 is the set (v - 1) / 3 + 1 over STEPS 1, NOTES 2, FX 4 at level (v - 1) % 3. One parameter: a FUN10
- * has room for one more (project.c) */
-static const char *const N_RND[] = {"OFF", "S1", "S2", "S3", "N1", "N2", "N3", "SN1", "SN2", "SN3", "F1", "F2", "F3",
-                                    "SF1", "SF2", "SF3", "NF1", "NF2", "NF3", "SNF1", "SNF2", "SNF3"};
 static const char *const N_ROLL[] = {"OFF", "1/8", "1/16", "1/32", "1/64", "1/8T", "1/16T", "1/32T"};
 /* ENV SYNC (1.5, #175; voice.c esync_coef): ATK DEC REL as note values of the tempo, shortest first. 0..127 split
  * evenly over these 25 (param_format's F_INT name list: value v is ESYNC_NAMES[v * 25 / 128]); ESYNC_UNITS: each in
@@ -173,7 +168,7 @@ static const param_desc_t TP[P_COUNT] = {
     [P_ESYNC] = PE("ESYNC", N_ONOFF, 0),          /* 1.5 (#175): OFF = ATK DEC REL in ms, as before (voice.c esync) */
     [P_ROLL] = PE("ROLL", N_ROLL, 0),             /* OFF = the steps as before; else a step plays repeats at this rate (seq.c seq_hits) */
     [P_RPIT] = PD("RPIT", F_SEMI, -24, 24, 0),    /* the pitch change from the first repeat to the last (voice.c roll16) */
-    [P_RND] = PE("RAND", N_RND, 0),               /* OFF = the pattern as written; else each pass is varied (seq.c seq_rand) */
+    [P_RND] = PD("RAND", F_INT, 0, 127, 0),       /* RAND page: AMOUNT x 8 + WHAT (1 STEPS, 2 NOTES, 4 FX); WHAT 0 = the pattern as written */
 };
 
 /* the INSERT's A B C as its TYPE means them (TP's ranges and defaults): the drives DRIVE TONE LEVEL, CRUSH BITS RATE
@@ -501,9 +496,10 @@ static const page_t PAGES[] = {
     {"DETAIL", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},   /* 1.5.1 (#199): the cursor step's CHANCE RATCH NUDGE VEL
                                                              * (ui.c detail_on, ui_input.c sd_turn) */
     {"STEP FX", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},   /* the cursor step's ROLL / STRCH / PTCH locks (SLICE; ui.c fx_on) */
+    {"RAND", FAM_SEQ, SC_STEP, GR_ROLL, {0, 1, 2, 3}},   /* the live random variation: WHAT and AMOUNT (ui.c rand_on, seq.c) */
     {"AUTOMATION", FAM_SEQ, SC_TRACK, GR_EVENTS, {0xFF, 0xFF, 0xFF, 0xFF}},  /* the locks, events, CHANCE and RATCH as a
                                                                              * list, PLAY and CLEAR (ui_events.c) */
-    {"ROLL", FAM_SEQ, SC_TRACK, GR_NONE, {P_ROLL, P_RPIT, P_RND, 0xFF}},   /* repeats up to 1/64 + a pitch ramp, and the live random variation (seq.c) */
+    {"ROLL", FAM_SEQ, SC_TRACK, GR_NONE, {P_ROLL, P_RPIT, 0xFF, 0xFF}},   /* repeats up to 1/64 + a pitch ramp (seq.c) */
     /* HOME's pages (1.2): HOME tapped on HOME the MIXER (up to 1.1.5 GLO's; LEVEL PAN REV MUTE), again CLOCK (up to 1.1.5
      * GLO > GLOBAL; its TUNE is MENU > AUDIO's now), again HOME (ui.c home_tap) */
     {"MIXER", FAM_TRK, SC_TRK, GR_TRK, {0, 1, 2, 3}},

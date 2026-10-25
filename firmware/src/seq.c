@@ -1132,22 +1132,19 @@ static const motion_store_t *chain_motion(const track_t *t)
 }
 
 /* RAND (P_RND; ROLL page): the pattern stays as written, each step is varied as it plays. A step that plays
- * (a NOTE with notes or hits) is varied with the chance of RAND's level (25, 55, 90 %; STEPS: 60 % of it), by what
- * its letters let (params.c N_RND):
+ * (a NOTE with notes or hits) is varied with the chance of RAND's AMOUNT (0..100 %; STEPS: 60 % of it), by what
+ * WHAT lets (SEQ > RAND, ui.c rand_on; P_RND = AMOUNT x 8 + WHAT):
  *   STEPS  the step drops out
  *   NOTES  its notes move together by a few semitones (further as RAND grows), onto the scale; a drum hit stays
  *   FX     ROLL gets a rate; on a SLICE track STRCH (when it is on) wanders around its value and PTCH shifts
  * The FX are put back at the next step (the locks of a step win over them). seq_rand_pre: before the step's
  * automation (puts the last step's FX back, picks the drop and the move; 1: drop); seq_rand_post: after it */
-static const uint8_t RND_AMT[3] = {25, 55, 90};
-/* P_RND -> the set of STEPS 1 / NOTES 2 / FX 4 (0: off) and the chance */
+/* P_RND -> the set of STEPS 1 / NOTES 2 / FX 4 (0: off) and the chance in percent (AMOUNT 0..15 of 100) */
 static uint32_t rnd_what(const track_t *t, uint32_t *a)
 {
-    uint32_t v = (uint32_t)clamp(t->p[P_RND], 0, 21);
-    if (!v)
-        return 0;
-    *a = RND_AMT[(v - 1u) % 3u];
-    return (v - 1u) / 3u + 1u;
+    uint32_t v = (uint32_t)clamp(t->p[P_RND], 0, 127);
+    *a = (v >> 3) * 100u / 15u;
+    return v & 7u;
 }
 static const int8_t RND_MOVE[10] = {2, -2, 3, -3, 5, -5, 7, -7, 12, -12};
 static const uint8_t RND_FX[3] = {P_ROLL, P_E2, P_E3};

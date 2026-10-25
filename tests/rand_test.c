@@ -2,10 +2,10 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* RAND (P_RND, ROLL page KNOB 3; seq.c seq_rand): the pattern stays, each pass is varied as it plays
  *   OFF       nothing changes: notes, ROLL, STRCH, PTCH as written
- *   S         steps drop out (fewer note-ons), N notes move (rnd_off), F ROLL repeats (more note-ons)
+ *   STEPS     steps drop out (fewer note-ons), NOTES move (rnd_off), FX: ROLL repeats (more note-ons)
  *   SLICE     F wanders STRCH (when on) and PTCH; all put back at the next step, and at STOP
- *   locks     a step's own ROLL lock wins over F
- *   the page  KNOB 3 on ROLL walks OFF S1 .. SNF3 */
+ *   locks     a step's own ROLL lock wins over FX
+ *   the page  SEQ > RAND: KNOB 1 WHAT (OFF .. ALL), KNOB 2 AMOUNT (0..15), packed in P_RND */
 #define UI_TEST_NO_MAIN 1
 #include "ui_test.c"
 
@@ -85,66 +85,74 @@ int main(void)
     base = run(t, 12);
     ok = base.mv == 0 && base.roll == 1u && base.on > 0;
     bad += check("RAND OFF: no move, no ROLL: the pattern as written", ok);
-    t->p[P_RND] = 3;                                    /* S3 */
+    t->p[P_RND] = 14 << 3 | 1;                       /* STEPS at 93 % */
     r = run(t, 12);
-    bad += check("S3: steps drop out (fewer note-ons), none moves, no ROLL", r.on < base.on && r.mv == 0 && r.roll == 1u);
-    t->p[P_RND] = 6;                                    /* N3 */
+    bad += check("STEPS 93 %: steps drop out (fewer note-ons), none moves, no ROLL", r.on < base.on && r.mv == 0 && r.roll == 1u);
+    t->p[P_RND] = 14 << 3 | 2;                       /* NOTES */
     r = run(t, 12);
-    bad += check("N3: every note-on kept, notes move (up to a few semitones; the steps' chord moves together)",
+    bad += check("NOTES: every note-on kept, notes move (up to a few semitones; the steps' chord moves together)",
                  r.on == base.on && r.mv >= 2u && r.mv <= 12u && r.roll == 1u);
-    t->p[P_RND] = 12;                                   /* F3 */
+    t->p[P_RND] = 14 << 3 | 4;                       /* FX */
     r = run(t, 12);
-    bad += check("F3: ROLL gets rates during the run (more note-ons), put back at STOP",
+    bad += check("FX: ROLL gets rates during the run (more note-ons), put back at STOP",
                  r.on > base.on && (r.roll & ~1u) && t->p[P_ROLL] == 0 && !t->rnd_on);
-    t->p[P_RND] = 21;                                   /* SNF3 */
+    t->p[P_RND] = 14 << 3 | 7;                       /* ALL */
     r = run(t, 12);
-    bad += check("SNF3: all three at once, ROLL back at STOP", r.mv >= 2u && (r.roll & ~1u) && t->p[P_ROLL] == 0);
-    t->p[P_RND] = 1;                                    /* S1 at 25 %, 15 % drop */
+    bad += check("ALL: all three at once, ROLL back at STOP", r.mv >= 2u && (r.roll & ~1u) && t->p[P_ROLL] == 0);
+    t->p[P_RND] = 4 << 3 | 1;                        /* STEPS at 26 % */
     r = run(t, 12);
-    bad += check("S1 drops fewer steps than S3", r.on < base.on && r.on > run(t, 12).on / 2u);
+    bad += check("STEPS 26 % drops fewer steps than 93 %", r.on < base.on && r.on > run(t, 12).on / 2u);
     t->p[P_RND] = 0;
     r = run(t, 12);
     bad += check("back to OFF: as written again", r.on == base.on && r.mv == 0 && r.roll == 1u);
 
     /* a step's own ROLL lock wins */
     t = pattern(0);
-    t->p[P_RND] = 12;
+    t->p[P_RND] = 14 << 3 | 4;
     {
         uint32_t i;
         for (i = 0; i < 16u; i++)
             (void)motion_set_lock(t, i, P_ROLL, 2);
         r = run(t, 6);
-        bad += check("a ROLL lock on every step: F leaves ROLL to the locks (1/16 on all)", r.roll == (1u << 2) && t->p[P_ROLL] == 0);
+        bad += check("a ROLL lock on every step: FX leaves ROLL to the locks (1/16 on all)", r.roll == (1u << 2) && t->p[P_ROLL] == 0);
     }
     /* SLICE: STRCH (on) and PTCH wander, put back */
     t = pattern(0);
     t->eng_req = ENGI_SLICE;
     t->p[P_E2] = 64;
     t->p[P_E3] = 0;
-    t->p[P_RND] = 12;
+    t->p[P_RND] = 14 << 3 | 4;
     r = run(t, 12);
     ok = r.smin != r.smax && r.pmin != r.pmax && r.smin >= 1u && r.smax <= 127u && t->p[P_E2] == 64 && t->p[P_E3] == 0;
-    bad += check("F3 on SLICE: STRCH and PTCH wander, both put back at STOP", ok);
+    bad += check("FX on SLICE: STRCH and PTCH wander, both put back at STOP", ok);
     t->p[P_E2] = 0;                                     /* STRCH off stays off */
     r = run(t, 12);
     bad += check("  STRCH off stays off (its timeline is not touched); PTCH still moves", r.smax == 0u && r.pmin != r.pmax);
-    /* the page */
+    /* the page: SEQ > RAND, KNOB 1 WHAT, KNOB 2 AMOUNT */
     t = pattern(0);
     {
         uint32_t i;
-        char v[16];
-        for (i = 0; i < NPAGES && !str_eq(PAGES[i].title, "ROLL"); i++)
+        for (i = 0; i < NPAGES && !str_eq(PAGES[i].title, "RAND"); i++)
             ;
         ui.home = 0; ui.page = (uint8_t)i; page_entered(); frame();
-        kt(EN_K3, 1);
-        ok = t->p[P_RND] == 1;
-        kt(EN_K3, 20);
-        ok &= t->p[P_RND] == 21;
-        param_format(&TP[P_RND], t->p[P_RND], v, &(const char *){0});
-        ok &= str_eq(v, "SNF3");
-        kt(EN_K3, -30);
-        ok &= t->p[P_RND] == 0;
-        bad += check("ROLL page KNOB 3 walks OFF, S1 .. SNF3 (22 values)", ok);
+        ok = rand_on() && t->p[P_RND] == 0;
+        kt(EN_K1, 1);                                   /* OFF -> STEPS, a middle AMOUNT */
+        ok &= (t->p[P_RND] & 7) == 1 && (t->p[P_RND] >> 3) == 8;
+        kt(EN_K2, 3);
+        ok &= (t->p[P_RND] >> 3) == 11 && (t->p[P_RND] & 7) == 1;
+        kt(EN_K1, 20);
+        ok &= (t->p[P_RND] & 7) == 7 && (t->p[P_RND] >> 3) == 11;
+        kt(EN_K2, 50);
+        ok &= (t->p[P_RND] >> 3) == 15;
+        kt(EN_K2, -50);
+        ok &= (t->p[P_RND] >> 3) == 0 && (t->p[P_RND] & 7) == 7;
+        kt(EN_K1, -20);
+        ok &= (t->p[P_RND] & 7) == 0;
+        bad += check("RAND page: KNOB 1 WHAT (OFF .. ALL), KNOB 2 AMOUNT (0..15), each its own half of P_RND", ok);
+        t->p[P_RND] = 0;
+        kt(EN_K2, 6);                                   /* AMOUNT with WHAT OFF: nothing varies */
+        r = run(t, 12);
+        bad += check("  WHAT OFF with an AMOUNT: the pattern as written", r.on == base.on && r.mv == 0 && r.roll == 1u);
     }
     printf("%s\n", bad ? "RAND TEST FAILED" : "rand tests passed");
     return bad != 0;

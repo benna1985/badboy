@@ -65,7 +65,7 @@
  * ANALOG's filter TYPE (P_FTYPE, 101) and ENV SYNC (P_ESYNC, 102), before the engine values (P_COUNT 111, P_E0 103; 16
  * spare, room for 4). A FUN10 of 1.2 .. 1.4 (104) loads by count: the INSERT OFF, TYPE LP, ENV SYNC OFF (as they
  * played), its engine values and their motion moved up by seven.
- * ROLL, RPIT and RAND (P_ROLL, P_RPIT, P_RND) went in after them (P_COUNT 114, P_E0 106): 4 spare bytes, 3 of them MIDI IN
+ * ROLL, RPIT and RAND (AMOUNT x 8 + WHAT; P_ROLL, P_RPIT, P_RND) went in after them (P_COUNT 114, P_E0 106): 4 spare bytes, 3 of them MIDI IN
  * TRACK's (PROJ_MIDI_OFF), so one more track parameter at most; a FUN10 of 113 loads by count (RAND OFF).
  * Firmware 1.2 .. 1.4 refuses a FUN10 of more parameters than its own (np > P_COUNT): a 1.5 project shows EMPTY there. FUN9 / FUN8 / FUN7 load as before (their 64 records of 4 bytes read by proj_motion_v9, every
  * step's nudge 0: the timing they always had; parameters mapped by count, the four new ones at their defaults:

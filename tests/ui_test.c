@@ -2679,7 +2679,7 @@ static int test_presets_knob(void)
             }
         }
     }
-    bad += check("#92 PRESETS on STEP (and 1.5.1's DETAIL, STEP FX): the step cursor; the sound and the steps stay", cur_ok && n_cur == 3u);
+    bad += check("#92 PRESETS on STEP (and 1.5.1's DETAIL, STEP FX, RAND): the step cursor; the sound and the steps stay", cur_ok && n_cur == 4u);
     bad += check("#94 PRESETS on USER, PROJECT, PHRASES, SONG, AUTOMATION: the selection (KNOB 1's); nothing loaded", sel_ok);
     bad += check("#94 PRESETS on TOOLS does nothing", tools_ok);
     bad += check("#94 PRESETS elsewhere (EDIT, ENV, LFO, FX, SCL, ARP, MIXER, GLOBAL, ...): the next sound, the steps stay",
@@ -6848,6 +6848,8 @@ static int test_seq_tools(void)
     press(B_SEQ); frames(320);
     ok &= str_eq(cur_page()->title, "STEP FX");
     press(B_SEQ); frames(320);
+    ok &= str_eq(cur_page()->title, "RAND");
+    press(B_SEQ); frames(320);
     ok &= cur_page()->graph == GR_EVENTS && str_eq(cur_page()->title, "AUTOMATION");
     press(B_SEQ); frames(320);
     ok &= str_eq(cur_page()->title, "ROLL");
@@ -6856,8 +6858,9 @@ static int test_seq_tools(void)
     press(B_SEQ); frames(320);
     press(B_SEQ); frames(320);
     press(B_SEQ); frames(320);
+    press(B_SEQ); frames(320);
     ok &= cur_page()->graph == GR_EVENTS;
-    bad += check("1.2: a tap on STEP: DETAIL (1.5.1), STEP FX, AUTOMATION, ROLL, then STEP again (five SEQ pages; the hint until the layer "
+    bad += check("1.2: a tap on STEP: DETAIL (1.5.1), STEP FX, RAND, AUTOMATION, ROLL, then STEP again (six SEQ pages; the hint until the layer "
                  "was opened)", ok);
     go_title("ENV"); frame();
     press(B_SEQ); frames(320);
@@ -7207,6 +7210,8 @@ static int test_layer_lock(void)
     ok &= str_eq(cur_page()->title, "DETAIL") && !ui.lock && !ui.layer;   /* (1.5.1) */
     press(B_SEQ); frames(400);
     ok &= str_eq(cur_page()->title, "STEP FX") && !ui.lock && !ui.layer;
+    press(B_SEQ); frames(400);
+    ok &= str_eq(cur_page()->title, "RAND") && !ui.lock && !ui.layer;
     press(B_SEQ); frames(400);
     ok &= str_eq(cur_page()->title, "AUTOMATION") && !ui.lock && !ui.layer;
     press(B_SEQ); frames(400);

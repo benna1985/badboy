@@ -1810,7 +1810,7 @@ function makeMockDevice(opt = {}) {
     D("INS A", F.PCT, 0, 127, 64), D("INS B", F.PCT, 0, 127, 96), D("INS C", F.PCT, 0, 127, 96), D("MIX", F.PCT, 0, 127, 127),
     E("TYPE", ["LP", "BP", "HP"], 0), E("ESYNC", ["OFF", "ON"], 0),   /* 1.5: ANALOG's filter TYPE (101, #104), ENV SYNC (102, #175) */
     E("ROLL", ["OFF", "1/8", "1/16", "1/32", "1/64", "1/8T", "1/16T", "1/32T"], 0), D("RPIT", F.SEMI, -24, 24, 0),   /* the sequencer roll (103, 104) */
-    E("RAND", ["OFF", "S1", "S2", "S3", "N1", "N2", "N3", "SN1", "SN2", "SN3", "F1", "F2", "F3", "SF1", "SF2", "SF3", "NF1", "NF2", "NF3", "SNF1", "SNF2", "SNF3"], 0));   /* RAND (105) */
+    D("RAND", F.INT, 0, 127, 0));   /* RAND (105) */
   const P_COUNT = 114, G_COUNT = 27, NSTEP = 64, P_E0 = 106, G_ENGSEL = 20, P_SLCR = 45;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const enumOrig = (d, v) => d.fmt === F.ENUM && d.names ? aliasOf(d.names, v - d.min) + d.min : v;   /* params.c enum_orig */
