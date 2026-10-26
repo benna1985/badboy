@@ -102,15 +102,14 @@ int main(void)
          pbank_get(2, 0) && pbank_get(2, 0)->step[1].note[0] == 50 && !pbank_get(1, 5) && !pbank_get(0, 7);
     check("read: the stored notes and sound, the slots that were empty are empty", ok);
 
-    /* what the file keeps: entries only for the used slots */
+    /* what the file keeps: the entries up to the last one in use */
     {
         const pbf_hdr_t *h = (const pbf_hdr_t *)host_flash;
         uint32_t n = 0;
-        for (k = 0; k < NTRK; k++)
-            for (i = 0; i < NPAT; i++)
-                n += pbank_idx[k][i] != 0;
-        ok = h->magic == PBF_MAGIC && h->n == n && h->len == sizeof pseq + n * sizeof(pbank_pat_t);
-        check("the header: magic, the entries used and their length", ok);
+        for (k = 0; k < NTRK * NPAT; k++)
+            n = ((uint8_t *)pbank_idx)[k] > n ? ((uint8_t *)pbank_idx)[k] : n;
+        ok = h->magic == PBF_MAGIC && h->len == sizeof(pbf_head_t) + n * sizeof(pbank_pat_t);
+        check("the header: magic and the payload length (the table, the order, the entries in use)", ok);
     }
 
     /* a changed byte: refused whole, the RAM bank left alone */

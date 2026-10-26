@@ -46,7 +46,6 @@ static pbank_pat_t *pbank_alloc(uint32_t k, uint32_t i)   /* the slot's entry, t
 }
 static uint8_t pbf_req;                    /* SAVE > PATTERNS asked: 1 write the bank to flash, 2 read it (pbank_flash.c pbf_poll) */
 static uint8_t pbank_dirty;                /* bit k: track k's bank differs from flash */
-static uint8_t pbank_flash_cur[NTRK];      /* (pbank_store.c) */
 
 static void pseq_bar(void);
 static void pseq_stop(void);

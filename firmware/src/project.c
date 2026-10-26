@@ -1190,7 +1190,7 @@ static void persist_boot(void)                    /* before settings_init / pane
                 proj_fetch(i);
     }
     up_boot();                                     /* user presets */
-    pbf_boot();                                    /* the saved pattern bank */
+    (void)pbf_read();                              /* the saved pattern bank (no track is touched) */
 #endif
 }
 

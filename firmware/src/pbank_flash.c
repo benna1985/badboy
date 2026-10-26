@@ -16,52 +16,47 @@
 #define PBF_XIP() fm1_xip_ptr(PBF_BASE)
 #endif
 typedef struct {
-    uint32_t magic, n, len, crc;                 /* entries, payload length, st_crc32 of the payload */
-    uint8_t idx[NTRK][NPAT];                     /* slot -> entry (1..n), 0 empty */
-    uint8_t pad[PBF_HDR - 16u - NTRK * NPAT - 4u];
+    uint32_t magic, len, crc;                    /* payload length, st_crc32 of the payload */
+    uint8_t pad[PBF_HDR - 12u - 4u];
     uint32_t hcrc;                               /* st_crc32 of everything above */
 } pbf_hdr_t;
 _Static_assert(sizeof(pbf_hdr_t) == PBF_HDR, "pattern bank header layout");
-_Static_assert(sizeof(pbank_pat_t) % 4u == 0u && PBF_HDR + sizeof(pseq_blob_t) + PSLOTS * sizeof(pbank_pat_t) <= PBF_SIZE,
-               "the bank fits the region");
+/* the payload: the slot -> entry table, the ORDER, then the entries up to the last one in use (the RAM bank as it is) */
+typedef struct {
+    uint8_t idx[NTRK][NPAT];
+    pseq_blob_t seq;
+} pbf_head_t;
+_Static_assert(PBF_HDR + sizeof(pbf_head_t) + PSLOTS * sizeof(pbank_pat_t) <= PBF_SIZE, "the bank fits the region");
+_Static_assert(sizeof(pbf_head_t) % 4u == 0u && sizeof(pbank_pat_t) % 4u == 0u, "written in words");
 
 /* write the bank: 0 done, 1 flash error, 2 nothing could be stored (full) */
 static int pbf_write(void)
 {
     pbf_hdr_t h;
-    uint32_t k, i, n = 0, len, crc, off, sec;
-    memset(&h, 0, sizeof h);
+    pbf_head_t d;
+    uint32_t k, n = 0, len, crc, off, sec;
     for (k = 0; k < NTRK; k++)                   /* the patterns being played go back to their slots first */
         if (!pbank_store(&trk[k]))
             return 2;
-    for (k = 0; k < NTRK; k++)
-        for (i = 0; i < NPAT; i++)
-            if (pbank_idx[k][i])
-                h.idx[k][i] = (uint8_t)++n;
-    len = (uint32_t)sizeof pseq + n * (uint32_t)sizeof(pbank_pat_t);
+    memcpy(d.idx, pbank_idx, sizeof d.idx);
+    d.seq = pseq;
+    for (k = 0; k < NTRK * NPAT; k++)
+        if (((const uint8_t *)pbank_idx)[k] > n)
+            n = ((const uint8_t *)pbank_idx)[k];
+    len = (uint32_t)sizeof d + n * (uint32_t)sizeof(pbank_pat_t);
     for (sec = 0; sec < (PBF_HDR + len + 0xFFFu) / 0x1000u; sec++)
         if (st_erase(PBF_BASE + sec * 0x1000u))
             return 1;
     off = PBF_BASE + PBF_HDR;
-    crc = st_crc32_add(0xFFFFFFFFu, &pseq, sizeof pseq);
-    if (st_prog(off, &pseq, sizeof pseq))
+    crc = st_crc32_add(st_crc32_add(0xFFFFFFFFu, &d, sizeof d), pbank_slab, n * (uint32_t)sizeof(pbank_pat_t));
+    if (st_prog(off, &d, sizeof d) || st_prog(off + (uint32_t)sizeof d, pbank_slab, n * (uint32_t)sizeof(pbank_pat_t)))
         return 1;
-    off += (uint32_t)sizeof pseq;
-    for (k = 0; k < NTRK; k++)                   /* (slot order = entry order) */
-        for (i = 0; i < NPAT; i++)
-            if (pbank_idx[k][i]) {
-                const pbank_pat_t *p = &pbank_slab[pbank_idx[k][i] - 1u];
-                crc = st_crc32_add(crc, p, sizeof *p);
-                if (st_prog(off, p, sizeof *p))
-                    return 1;
-                off += (uint32_t)sizeof *p;
-            }
+    memset(&h, 0, sizeof h);
     h.magic = PBF_MAGIC;
-    h.n = n;
     h.len = len;
     h.crc = ~crc;
     h.hcrc = st_crc32(&h, sizeof h - 4u);
-    if (st_prog(PBF_BASE, &h, sizeof h))
+    if (st_prog(PBF_BASE, &h, sizeof h))         /* (the commit: last) */
         return 1;
     pbank_dirty = 0;
     pseq_dirty = 0;
@@ -72,41 +67,23 @@ static int pbf_write(void)
 static int pbf_read(void)
 {
     const uint8_t *x = PBF_XIP();
+    const pbf_head_t *d = (const pbf_head_t *)(x + PBF_HDR);
     pbf_hdr_t h;
-    uint32_t k, i, crc;
-    const pbank_pat_t *src;
+    uint32_t k, n;
     memcpy(&h, x, sizeof h);
-    if (h.magic != PBF_MAGIC || h.hcrc != st_crc32(&h, sizeof h - 4u) || h.n > PSLOTS ||
-        h.len != (uint32_t)sizeof pseq + h.n * (uint32_t)sizeof(pbank_pat_t))
+    if (h.magic != PBF_MAGIC || h.hcrc != st_crc32(&h, sizeof h - 4u) || h.len < sizeof *d ||
+        (h.len - sizeof *d) % sizeof(pbank_pat_t) || (h.len - sizeof *d) / sizeof(pbank_pat_t) > PSLOTS ||
+        ~st_crc32_add(0xFFFFFFFFu, d, h.len) != h.crc)
         return 0;
-    crc = ~st_crc32_add(0xFFFFFFFFu, x + PBF_HDR, h.len);
-    if (crc != h.crc)
-        return 0;
-    for (k = 0; k < NTRK; k++)
-        for (i = 0; i < NPAT; i++)
-            if (h.idx[k][i] > h.n)
-                return 0;
-    memcpy(&pseq, x + PBF_HDR, sizeof pseq);
-    for (k = 0; k < NTRK; k++) {                 /* an order the page could not have made is cut to what it could */
-        if (pseq.n[k] > PSEQ_MAX)
-            pseq.n[k] = PSEQ_MAX;
-        for (i = 0; i < pseq.n[k]; i++) {
-            pseq.row[k][i].pat %= NPAT;
-            if (!pseq.row[k][i].bars || pseq.row[k][i].bars > 99u)
-                pseq.row[k][i].bars = 1;
-        }
-    }
-    src = (const pbank_pat_t *)(x + PBF_HDR + sizeof pseq);
-    memset(pbank_idx, 0, sizeof pbank_idx);
-    for (k = 0; k < NTRK; k++)
-        for (i = 0; i < NPAT; i++)
-            if (h.idx[k][i]) {
-                pbank_pat_t *d = pbank_alloc(k, i);
-                memcpy(d, &src[h.idx[k][i] - 1u], sizeof *d);
-                if (d->mcount > PAT_MOT)
-                    d->mcount = PAT_MOT;
-                d->used = 1;
-            }
+    n = (h.len - (uint32_t)sizeof *d) / (uint32_t)sizeof(pbank_pat_t);
+    for (k = 0; k < NTRK * NPAT; k++)
+        if (((const uint8_t *)d->idx)[k] > n)
+            return 0;
+    memcpy(pbank_idx, d->idx, sizeof pbank_idx);
+    memcpy(&pseq, &d->seq, sizeof pseq);
+    memcpy(pbank_slab, d + 1, n * sizeof(pbank_pat_t));
+    for (k = 0; k < NTRK; k++)                   /* what the page could not have made is cut to what it could */
+        pseq.n[k] = pseq.n[k] > PSEQ_MAX ? PSEQ_MAX : pseq.n[k];
     pbank_dirty = 0;
     pseq_dirty = 0;
     return 1;
@@ -134,8 +111,4 @@ static void pbf_poll(void)
         ui_message("NO SAVED PATTERNS");
     }
     pbf_req = 0;
-}
-static void pbf_boot(void)                       /* persist_boot: the saved bank into RAM (no tracks touched) */
-{
-    (void)pbf_read();
 }
