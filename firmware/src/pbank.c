@@ -13,7 +13,7 @@
  * pbank_pat_t is not a project: PROJECT slots and SONG are as before. A project load replaces the live pattern. */
 #define NPAT 16
 #define PAT_MOT 16                       /* automation and locks kept per pattern (the track's 128 are shared by the four) */
-#define PSLOTS 40                        /* patterns kept in RAM, shared by all tracks (the POOL is full): "BANK FULL" past it */
+#define PSLOTS 34                        /* patterns kept in RAM, shared by all tracks (the POOL is full): "BANK FULL" past it */
 typedef struct {
     uint8_t used, qnt, mon, mcount;      /* used: stored; mon: the track's motion was on; mcount: records kept */
     int16_t timing[4];                   /* LEN DIV SWING GATE */

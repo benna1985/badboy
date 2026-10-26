@@ -106,7 +106,7 @@ int main(void)
     ok = !pbank_launch(t, 3) && t->pat == 0;
     chain.running = 0;
     bad += check("a running SONG refuses launches", ok);
-    /* BANK FULL: 40 entries shared; past them a launch / copy is refused and nothing is lost */
+    /* BANK FULL: PSLOTS entries shared; past them a launch / copy is refused and nothing is lost */
     {
         uint32_t k, i, n = 0, f = 0;
         for (k = 0; k < NTRK; k++)
@@ -124,7 +124,7 @@ int main(void)
         for (k = 0; k < NTRK; k++)
             for (i = 0; i < NPAT; i++)
                 pbank_idx[k][i] = 0;
-        bad += check("BANK FULL: 40 entries shared by all tracks, the 41st is refused", ok);
+        bad += check("BANK FULL: the shared entries used up, the next is refused", ok);
     }
     printf("%s\n", bad ? "PATTERN TEST FAILED" : "pattern tests passed");
     return bad != 0;
