@@ -924,6 +924,17 @@ static uint32_t seq_hits(const track_t *t, const step_t *s, uint32_t period, uin
 static uint32_t seq_head(const track_t *t, uint32_t idx, uint32_t len);
 static uint32_t seq_tie_rolls(const track_t *t, uint32_t idx, uint32_t len);
 static uint32_t seq_part_len(const track_t *t, const step_t *s, uint32_t period, uint32_t idx, uint32_t len);
+/* the step idx's time as it plays: RAND FX lengthened a note over the steps after its own (rnd_head, rnd_ext of them):
+ * they are TIEs then; the pattern itself is not touched */
+static uint32_t seq_time_at(const track_t *t, uint32_t idx)
+{
+    if (t->rnd_ext) {
+        uint32_t len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u, d = (idx + len - t->rnd_head) % len;
+        if (d && d <= t->rnd_ext)
+            return ST_TIE;
+    }
+    return seq_steps(t)[idx].time;
+}
 #define SEQ_REP (1u << 16)
 #define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
 #define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
@@ -933,7 +944,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t vel = (s->flags & SF_ACCENT) ? 127u : (s->vel ? s->vel : 96u);
     uint32_t slide_in = t->seq_hold && t->seq_n && !(skip & SEQ_REP);
     uint32_t len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u;
-    uint32_t next_tie = seq_steps(t)[(idx + 1u) % len].time == ST_TIE;
+    uint32_t next_tie = seq_time_at(t, (idx + 1u) % len) == ST_TIE;
+    uint32_t stie = seq_time_at(t, idx) == ST_TIE;
     uint32_t hits = seq_hits(t, s, period, idx);
     uint8_t nn[4 + NLANE], vv[4 + NLANE];           /* the notes it plays: its notes, then its hits */
     uint32_t m = 0, sk = 0;
@@ -944,7 +956,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     uint32_t qseq = t->p[P_QUANT] >= QN_SEQ && !(e->keys && e->keys(t, 0) >= 0);
     int32_t qtrn = qseq && t->p[P_QUANT] == QN_SEQT ? t->p[P_TRANS] : 0;
     if (!(skip & SEQ_REP)) {
-        if (s->time != ST_TIE)                      /* (a TIE goes on with the repeats of a rolled note) */
+        if (!stie)                                  /* (a TIE goes on with the repeats of a rolled note) */
             t->rat_left = 0;
         if ((skip & SEQ_MISS) || (!(skip & SEQ_ROLLED) && seq_miss(t, s, idx))) {
             t->rat_left = 0;
@@ -952,7 +964,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
             return;
         }
     }
-    if (s->time == ST_TIE) {
+    if (stie) {
         if (t->seq_n && !t->rat_left && !seq_tie_rolls(t, idx, len)) {
             t->seq_off = gate + period / 2u;
             t->seq_hold = (s->flags & SF_SLIDE) != 0 || next_tie;   /* chains hold at any GATE / swing */
@@ -1072,7 +1084,7 @@ static const uint8_t ROLL_DEN[8] = {0, 2, 4, 8, 16, 3, 6, 12};
 static uint32_t seq_head(const track_t *t, uint32_t idx, uint32_t len)
 {
     uint32_t k;
-    for (k = 1; k < len && seq_steps(t)[idx].time == ST_TIE; k++)
+    for (k = 1; k < len && seq_time_at(t, idx) == ST_TIE; k++)
         idx = (idx + len - 1u) % len;
     return idx;
 }
@@ -1085,7 +1097,7 @@ static uint32_t seq_part_len(const track_t *t, const step_t *s, uint32_t period,
         return n;
     for (k = 1; k < len; k++) {
         j = (idx + k) % len;
-        if (seq_steps(t)[j].time != ST_TIE)
+        if (seq_time_at(t, j) != ST_TIE)
             break;
         n += step_samples(t, period, j);
     }
@@ -1153,51 +1165,99 @@ static uint32_t rnd_what(const track_t *t, uint32_t *a)
     return v & 7u;
 }
 static const int8_t RND_MOVE[10] = {2, -2, 3, -3, 5, -5, 7, -7, 12, -12};
-static const uint8_t RND_FX[3] = {P_ROLL, P_E2, P_E3};
+static const uint8_t RND_FX[4] = {P_ROLL, P_E2, P_E3, P_RPIT};
 static void seq_rand_back(track_t *t)
 {
     uint32_t k;
+    t->rnd_ext = 0;
     if (!t->rnd_on)
         return;
-    for (k = 0; k < 3u; k++)
+    for (k = 0; k < 4u; k++)
         if (t->p[RND_FX[k]] == t->rnd_s[k])             /* (a knob turned meanwhile stays) */
             t->p[RND_FX[k]] = t->rnd_b[k];
     t->rnd_on = 0;
 }
-static __attribute__((noinline)) uint32_t seq_rand_pre(track_t *t, const step_t *s)
+/* a note the track's sound plays as its own sample slice (SLICE: the keys are slices, C4 + ROOT up; one outside them
+ * would play a slice again, wrapped); any other engine: any note */
+static int seq_rand_pitch_ok(const track_t *t, int32_t note)
 {
-    uint32_t a = 0, what = rnd_what(t, &a), n;
-    int32_t m;
+#if FELUCCA_SLICE
+    if (t->eng_req % NENGINES == ENGI_SLICE)
+        return slc_note_has_slice(t, note);
+#endif
+    (void)t;
+    return note >= 0 && note <= 127;
+}
+/* the step idx starts. A TIE (or a step RAND lengthened a note over) goes on with the note's FX and its moved pitch:
+ * they last the note's whole length, and are put back at the next step that is not one */
+static __attribute__((noinline)) uint32_t seq_rand_pre(track_t *t, const step_t *s, uint32_t idx)
+{
+    uint32_t a = 0, what = rnd_what(t, &a), n, k;
+    int32_t m, base;
+    if (seq_time_at(t, idx) == ST_TIE)
+        return 0;
     seq_rand_back(t);
     t->rnd_off = 0;
+    t->rnd_ext = 0;
     if (!what || s->time != ST_NOTE || (!s->n && !s->hit))
         return 0;
     if ((what & 1u) && rng() % 100u < a * 3u / 5u)
         return 1;
     if ((what & 2u) && s->n && rng() % 100u < a) {
+        base = (int32_t)s->note[0];
         n = a < 34u ? 4u : a < 67u ? 6u : 10u;
-        m = scale_snap(t, (int32_t)s->note[0] + RND_MOVE[rng() % n]) - (int32_t)s->note[0];
-        t->rnd_off = (int8_t)clamp(m, -24, 24);
+        for (k = 0; k < 6u; k++) {                          /* a few tries for a pitch that has a slice */
+            uint32_t j, all = 1;
+            m = scale_snap(t, base + RND_MOVE[rng() % n]);
+            for (j = 0; j < s->n && j < 4u; j++)                /* (the chord moves together: each note needs its slice) */
+                all &= (uint32_t)seq_rand_pitch_ok(t, (int32_t)s->note[j] + (m - base));
+            if (m != base && all) {
+                t->rnd_off = (int8_t)clamp(m - base, -24, 24);
+                break;
+            }
+        }
     }
     return 0;
 }
+/* after the step's automation: FX. ROLL a rate of 1/16, 1/32 or 1/64; on a SLICE track STRCH (when it is on) wanders
+ * and PTCH shifts; the roll's pitch change RPIT: all within 5 semitones. They last the note, and at a high AMOUNT the
+ * note is lengthened over up to three steps after it (rests and ties; at 80 % and over also the notes there) so the
+ * stretch and the roll are heard */
 static __attribute__((noinline)) void seq_rand_post(track_t *t, const step_t *s, uint32_t idx)
 {
-    uint32_t a = 0, k, what = rnd_what(t, &a);
+    uint32_t a = 0, k, what = rnd_what(t, &a), len, room = 0, ext;
     int16_t v;
-    if (!(what & 4u) || s->time != ST_NOTE || (!s->n && !s->hit) || rng() % 100u >= a)
+    int32_t r;
+    if (!(what & 4u) || s->time != ST_NOTE || (!s->n && !s->hit) || seq_time_at(t, idx) == ST_TIE || rng() % 100u >= a)
         return;
-    for (k = 0; k < 3u; k++)
-        t->rnd_b[k] = t->rnd_s[k] = t->p[RND_FX[k]];
+    for (k = 0; k < 4u; k++)
+        t->rnd_b[k] = t->rnd_s[k] = (int8_t)t->p[RND_FX[k]];
+    r = 1 + (int32_t)(a * 4u / 100u);                       /* the largest change: 1 .. 5 semitones */
     if (!motion_lock_get(t, idx, P_ROLL, &v))
-        t->p[P_ROLL] = t->rnd_s[0] = (int16_t)(1 + rng() % 4u);   /* 1/8 .. 1/64 */
+        t->p[P_ROLL] = t->rnd_s[0] = (int8_t)(2 + rng() % 3u);   /* 1/16, 1/32, 1/64 */
+    if (!motion_lock_get(t, idx, P_RPIT, &v))
+        t->p[P_RPIT] = t->rnd_s[3] = (int8_t)((int32_t)(rng() % (uint32_t)(2 * r + 1)) - r);
     if (t->eng_req % NENGINES == ENGI_SLICE) {
         if (t->rnd_b[1] && !motion_lock_get(t, idx, P_E2, &v))
-            t->p[P_E2] = t->rnd_s[1] = (int16_t)clamp((int32_t)t->rnd_b[1] + (int32_t)(rng() % (a * 4u / 5u + 1u)) - (int32_t)(a * 2u / 5u), 1, 127);
+            t->p[P_E2] = t->rnd_s[1] = (int8_t)clamp((int32_t)t->rnd_b[1] + (int32_t)(rng() % (a * 4u / 5u + 1u)) - (int32_t)(a * 2u / 5u), 1, 127);
         if (!motion_lock_get(t, idx, P_E3, &v))
-            t->p[P_E3] = t->rnd_s[2] = (int16_t)clamp((int32_t)t->rnd_b[2] + (int32_t)(rng() % (a / 6u * 2u + 1u)) - (int32_t)(a / 6u), -24, 24);
+            t->p[P_E3] = t->rnd_s[2] = (int8_t)((int32_t)t->rnd_b[2] + (int32_t)(rng() % (uint32_t)(2 * r + 1)) - r);
     }
     t->rnd_on = 1;
+    len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u;
+    if (a > 50u && rng() % 100u < (a - 50u) * 2u && idx + 1u < len) {   /* lengthen: room after it, not past the loop's end */
+        for (k = 1; k <= 3u && idx + k < len; k++) {
+            uint32_t tm = seq_steps(t)[idx + k].time;
+            if (tm == ST_NOTE && a < 80u)
+                break;
+            room = k;
+        }
+        if (room) {
+            ext = 1u + rng() % room;
+            t->rnd_head = (uint8_t)idx;
+            t->rnd_ext = (uint8_t)ext;
+        }
+    }
 }
 
 /* step idx plays: its chance (the one roll, as seq_step made it: a step that does not play applies no lock), the
@@ -1208,10 +1268,10 @@ static __attribute__((noinline)) void seq_play(track_t *t, uint32_t idx, uint32_
     const step_t *s = &seq_steps(t)[idx];
     const motion_store_t *m = chain_motion(t);
     uint32_t skip = SEQ_ROLLED, i, k;
-    if (seq_miss(t, s, idx) || seq_rand_pre(t, s))
+    if (seq_miss(t, s, idx) || seq_rand_pre(t, s, idx))
         skip = SEQ_MISS;
     if (m)
-        motion_step(t, idx, m, skip == SEQ_ROLLED, s->time == ST_TIE);
+        motion_step(t, idx, m, skip == SEQ_ROLLED, seq_time_at(t, idx) == ST_TIE);
     if (skip == SEQ_ROLLED)
         seq_rand_post(t, s, idx);
     if (t->rskip_n && t->rskip_idx == idx) {

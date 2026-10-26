@@ -283,9 +283,10 @@ typedef struct track {
     uint8_t slide_glide;         /* next legato note glides (slide) */
     int8_t rnd_off;              /* RAND: the semitones the playing step is moved by (seq.c seq_rand), 0 = none */
     uint8_t rnd_on;              /* RAND FX: the ROLL / STRCH / PTCH of the step were replaced (restored at the next step) */
-    int8_t rnd_b[3], rnd_s[3];   /* .. their values before and the ones set */
+    int8_t rnd_b[4], rnd_s[4];   /* .. their values before and the ones set (ROLL STRCH PTCH RPIT) */
+    uint8_t rnd_ext, rnd_head;   /* RAND FX: the note on step rnd_head lasts rnd_ext steps more (the steps after it act as TIEs) */
     uint8_t pat, pat_q;          /* pattern bank (pbank.c): the pattern loaded (0..15), the one queued for the next bar + 1 (0: none) */
-    uint8_t rnd_pad[5];          /* (track_t stays a multiple of 16 bytes) */
+    uint8_t rnd_pad[1];          /* (track_t stays a multiple of 16 bytes) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
     uint32_t seq_off;
     uint8_t seq_active;          /* any step programmed */

@@ -202,6 +202,15 @@ static uint32_t slc_note_slice(const int16_t *p, uint32_t note, uint32_t n)
     return (uint32_t)(j < 0 ? j + (int32_t)n : j);
 }
 
+/* the note (a key's) is one of the track's slices, not one a wrap would play again (seq.c RAND NOTES); no material: any */
+static int slc_note_has_slice(const track_t *t, int32_t note)
+{
+    const slc_src_t *s = slc_get(slc_src_of(t->p));
+    int32_t j = note - SLC_BASE - t->p[P_ROOT];
+    if (!s)
+        return note >= 0 && note <= 127;
+    return j >= 0 && j < (int32_t)slc_count(s, (uint32_t)clamp(t->p[P_E1], 0, SLC_DIV_MAN)) && note >= 0 && note <= 127;
+}
 /* slice j of DIV div: [*a, *b), *st the state at *a */
 static void slc_bounds(const slc_src_t *s, uint32_t div, uint32_t j, uint32_t *a, uint32_t *b, uint32_t *st)
 {

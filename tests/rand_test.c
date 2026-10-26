@@ -128,6 +128,70 @@ int main(void)
     t->p[P_E2] = 0;                                     /* STRCH off stays off */
     r = run(t, 12);
     bad += check("  STRCH off stays off (its timeline is not touched); PTCH still moves", r.smax == 0u && r.pmin != r.pmax);
+    /* the FX last the note, within the limits; the note lengthens at a high AMOUNT; the pitch has a slice */
+    {
+        uint32_t b, blocks, rolls = 0, ext = 0, tie_keep = 0, tie_n = 0, rp_ok = 1, pt_ok = 1, pitch_ok = 1, moved = 0;
+        t = pattern(0);
+        t->eng_req = ENGI_SLICE;
+        usr_nz[0] = 1;                                  /* a user sample in USR1: its 16 slices (DIV 1/16) */
+        slc_usr[0].len = 4000;
+        t->p[P_E0] = 1;
+        t->p[P_E1] = 2;                                 /* DIV 1/16: 16 slices */
+        t->p[P_E2] = 64;
+        t->p[P_E3] = 0;
+        t->p[P_RND] = 15 << 3 | 7;                      /* ALL at 100 % */
+        blocks = (div_samples(2) / CTL * 16u - 1u) * 30u;
+        seq_start();
+        for (b = 0; b < blocks; b++) {
+            uint32_t idx;
+            seq_tick(t, CTL);
+            idx = t->seq_idx;
+            if (t->p[P_ROLL] && !((t->p[P_ROLL] >= 2 && t->p[P_ROLL] <= 4))) rolls = 99;
+            else if (t->p[P_ROLL]) rolls |= 1u << t->p[P_ROLL];
+            if (t->p[P_RPIT] < -5 || t->p[P_RPIT] > 5) rp_ok = 0;
+            if (t->p[P_E3] < -5 || t->p[P_E3] > 5) pt_ok = 0;
+            if (t->rnd_ext) {
+                ext = t->rnd_ext > ext ? t->rnd_ext : ext;
+                if (seq_time_at(t, idx) == ST_TIE) {        /* inside the lengthened note: the FX are still on */
+                    tie_n++;
+                    tie_keep += t->rnd_on && t->p[P_ROLL] >= 2;
+                }
+            }
+            if (t->rnd_off && seq_time_at(t, idx) != ST_TIE && trk[0].step[idx].time == ST_NOTE && trk[0].step[idx].n) {
+                uint32_t j;
+                moved++;
+                for (j = 0; j < trk[0].step[idx].n; j++) {
+                    int32_t rel = (int32_t)trk[0].step[idx].note[j] + t->rnd_off - 60 - t->p[P_ROOT];
+                    if (rel < 0 || rel >= 16) pitch_ok = 0;
+                }
+            }
+        }
+        seq_stop();
+        ok = rolls != 99u && (rolls & 0x1Cu) == 0x1Cu && !(rolls & 0x2u);
+        bad += check("RAND FX: ROLL is 1/16, 1/32 or 1/64 (all three seen, never 1/8 or the triplets)", ok);
+        bad += check("  the roll's pitch change and PTCH stay within 5 semitones", rp_ok && pt_ok);
+        bad += check("  at 100 % a note is lengthened (up to 3 steps more), the FX still on through them",
+                     ext >= 1u && ext <= 3u && tie_n > 0 && tie_keep == tie_n);
+        bad += check("  NOTES on SLICE: every moved pitch is one of the 16 slices", moved > 0 && pitch_ok);
+        usr_nz[0] = 0;
+        slc_usr[0].len = 0;
+        ok = t->p[P_ROLL] == 0 && t->p[P_RPIT] == 0 && t->p[P_E3] == 0 && t->p[P_E2] == 64;
+        bad += check("  put back at STOP", ok);
+    }
+    {   /* a low AMOUNT never lengthens; the real TIE of step 3 keeps the FX of its note */
+        uint32_t b, blocks, ext = 0, keep = 0, n = 0;
+        t = pattern(0);
+        t->p[P_RND] = 4 << 3 | 4;                       /* FX at 27 % */
+        blocks = (div_samples(2) / CTL * 16u - 1u) * 60u;
+        seq_start();
+        for (b = 0; b < blocks; b++) {
+            seq_tick(t, CTL);
+            ext |= t->rnd_ext;
+            if (t->seq_idx == 3u && t->rnd_on) { n++; keep += t->p[P_ROLL] >= 2; }
+        }
+        seq_stop();
+        bad += check("RAND FX at 27 %: no lengthening; a real TIE keeps its note's ROLL", ext == 0u && n > 0 && keep == n);
+    }
     /* the page: SEQ > RAND, KNOB 1 WHAT, KNOB 2 AMOUNT */
     t = pattern(0);
     {
