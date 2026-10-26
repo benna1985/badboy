@@ -190,10 +190,12 @@ static int select_page(void)
     }
     go_title("SONG"); frame();
     turn(EN_SELECT, 1);
-    ok &= title_is("LAUNCH");                          /* GLO: SONG, LAUNCH, round */
+    ok &= title_is("LAUNCH");                          /* GLO: SONG, LAUNCH, ORDER, round */
+    turn(EN_SELECT, 1);
+    ok &= title_is("ORDER");
     turn(EN_SELECT, 1);
     ok &= title_is("SONG");
-    bad += check("  PAGE: EDIT's round is the engine's pages; GLO is SONG + LAUNCH", ok);
+    bad += check("  PAGE: EDIT's round is the engine's pages; GLO is SONG, LAUNCH, ORDER", ok);
 
     go_title("ENV"); frame();
     b0 = song.g[G_BPM];

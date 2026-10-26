@@ -84,8 +84,8 @@ static slc_man_t *slice_edit_begin(uint32_t *k)
     slc_man_t *m;
     if (!s || !src || src == SLC_SRC_PIANO) {
         static const char *const EMPTY[SMP_USER_SLOTS] = {"USR1 EMPTY", "USR2 EMPTY", "USR3 EMPTY",
-                                                          "USR4 EMPTY", "USR5 EMPTY", "USR6 EMPTY"};
-        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[slc_src_slot(src)] : "SRC USR1-6 TO EDIT");
+                                                          "USR4 EMPTY", "USR5 EMPTY"};
+        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[slc_src_slot(src)] : "SRC USR1-5 TO EDIT");
         return 0;
     }
     *k = slc_src_slot(src);

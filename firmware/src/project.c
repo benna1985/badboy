@@ -1151,6 +1151,9 @@ static void project_load(uint32_t slot)
 #include "slice_store.c"                          /* SLICE's MAN slices, kept in the user slots */
 #endif
 #if FELUCCA_FLASH
+#include "pbank_flash.c"                          /* the pattern bank and its ORDER (SAVE > PATTERNS), where USR6 was */
+#endif
+#if FELUCCA_FLASH
 static persist_t persist_saved __attribute__((section(".pool")));
 static uint8_t persist_pending;                 /* 1 requested, 2 waiting after a flash error */
 static uint32_t persist_retry_ms;
@@ -1187,6 +1190,7 @@ static void persist_boot(void)                    /* before settings_init / pane
                 proj_fetch(i);
     }
     up_boot();                                     /* user presets */
+    pbf_boot();                                    /* the saved pattern bank */
 #endif
 }
 
@@ -1245,6 +1249,7 @@ static void settings_poll(void)
 #if FELUCCA_SLICE
     slc_store_poll();                              /* SLICE's slices edited on the SLICES page */
 #endif
+    pbf_poll();                                    /* SAVE > PATTERNS: WRITE / READ of the pattern bank */
     if (!persist_pending || !flash_ok || transport_busy() ||
         (persist_pending == 2u && (uint32_t)(fm1_ms - persist_retry_ms) < 1000u))
         return;

@@ -83,10 +83,10 @@ typedef struct {
 } slc_mem_t;
 ENG_MEM_FITS("SLICE", sizeof(slc_mem_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
-/* (this fork: USR4..USR6 appended after PIANO, as 5..7; user slot k <-> source slc_slot_src(k)) */
-static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO", "USR4", "USR5", "USR6"};
+/* (this fork: USR4..USR5 appended after PIANO, as 5..7; user slot k <-> source slc_slot_src(k)) */
+static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO", "USR4", "USR5"};
 #define SLC_SRC_PIANO 4u
-#define SLC_NSRC 8
+#define SLC_NSRC 7
 #define SLC_SINE_BIT (1u << 24)      /* in a voice's s[4]: no material, the sine (the source field is then unused) */
 /* user slot k (0..5) -> its SRC number: USR1..3 are 1..3, USR4..6 are 5..7 (4 is PIANO) */
 static inline uint32_t slc_slot_src(uint32_t k) { return k < 3u ? k + 1u : k + 2u; }

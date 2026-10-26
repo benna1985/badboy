@@ -239,8 +239,8 @@ reply.
 unused mask bits in the last group must be zero. Oversized or incomplete transfers
 are rejected; SMP_WRITE decodes at most 256 bytes, SMP_END exactly 480 bytes.
 
-**User sample slot** (this fork: 6 slots of 40 KiB each, SAMPLE engine sets USR1..USR6 = 34..39, after the 16 rave stabs at 5..20 and the 13 basses at 21..33, SLICE SRC USR1..USR3 = 1..3
-and USR4..USR6 = 5..7; upstream Felucca has 3 of 80 KiB; `SMP_INFO` reports the count and size; reference uploader
+**User sample slot** (this fork: 5 slots of 40 KiB each, SAMPLE engine sets USR1..USR5 = 34..38, after the 16 rave stabs at 5..20 and the 13 basses at 21..33, SLICE SRC USR1..USR3 = 1..3
+and USR4..USR5 = 5..6; upstream Felucca has 3 of 80 KiB; `SMP_INFO` reports the count and size; reference uploader
 `tools/fm1_sample_upload.py`, slot builder `sampleio.user_slot`; the editor's port of it is
 checked byte for byte by `web/test_web.mjs`): header at 0, ADPCM data at 512.
 
@@ -297,7 +297,7 @@ numbered 0..31 (the device shows U01..U32).
   = 4, stored then or sent by `UP_PUT`, is the DRUM engine with its default kit: the device rewrites it (engine 10,
   E1..E8 = DRUM KIT's {0, 64, 70, 64, 64, 100, 0, 0}, the other values and the pattern as they were). Projects
   and `PRESET` 4 / 4 do the same (a project's track keeps its steps). SET 4 itself stays (`DESC` names it "PIANO":
-  an alias, as SET 1; a `SET` of 4 lands on 0), and the 16 rave stabs follow at 5..20, the 13 basses at 21..33 and USR1..USR6 at 34..39 (upstream: USR1..USR3 at 5..7); GRAIN's SRC 4 plays PIANO.
+  an alias, as SET 1; a `SET` of 4 lands on 0), and the 16 rave stabs follow at 5..20, the 13 basses at 21..33 and USR1..USR5 at 34..38 (upstream: USR1..USR3 at 5..7); GRAIN's SRC 4 plays PIANO.
 - **DRUM KIT 1..3** were HAND, CYM and H+CYM until 1.0.4 (STD with a conga / claves, a cymbal, both). Since 1.0.5
   they play the VA kits 66, 10 and 77, and a record holding one loads as that kit: `UP_GET` / `UP_LOAD` give KIT 6, 5
   or 8 (the record itself is not rewritten). Projects, motion events and `SET` do the same.

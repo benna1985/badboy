@@ -281,6 +281,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "SONG: each section plays its slots' sounds (engine, preset, values) as well as their patterns; STOP brings the own sounds back" "$OUT/songsound_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/pattern_test" tests/pattern_test.c -lm
     run "PATTERNS: 16 per track (steps, sound, motion, timing), bar-quantised launch, copy, clear" "$OUT/pattern_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/pbank_flash_test" tests/pbank_flash_test.c -lm
+    run "PATTERNS in flash (SAVE > PATTERNS): the bank and the ORDER written and read back, a torn write or a changed byte refused" "$OUT/pbank_flash_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/rand_test" tests/rand_test.c -lm
     run "RAND: the ROLL page's KNOB 3 varies each pass live (steps drop, notes move, ROLL / STRCH / PTCH), put back at STOP" "$OUT/rand_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/seq155_test" tests/seq155_test.c -lm

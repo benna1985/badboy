@@ -38,11 +38,11 @@ static uint32_t pow2_q16(int32_t d16)
 }
 
 /* ---- user sample slots (loaded from the web editor into flash, see web/EDITOR_PROTOCOL.md)
- * 6 slots of 40 KiB at flash 0xA0000..0xDBFFF (Felucca data region; the same 240 KiB as the 3 slots of 80 KiB
+ * 5 slots of 40 KiB at flash 0xA0000..0xD1FFF (0xD2000..0xDBFFF: the pattern bank, pbank_flash.c; this fork had 6 here)
  * this fork replaced), read through the plain XIP window. Slot = header (magic, count, name, data length, CRC32)
  * + up to 16 zones in the smp_zone_t layout (off relative to the slot's data at +512) + IMA ADPCM data. */
 #include "../hal/fm1_xip.h"   /* relative: hostsim includes this file too */
-#define SMP_USER_SLOTS 6
+#define SMP_USER_SLOTS 5
 #define SMP_USER_BASE 0xA0000u
 #define SMP_USER_SIZE 0xA000u
 #define SMP_USER_DATA 512u
@@ -58,7 +58,7 @@ typedef struct {
 } smp_user_hdr_t;                                   /* 32 + 16 x 28 = 480 B, data at +512 */
 static smp_zone_t usr_zone[SMP_USER_SLOTS][16];     /* RAM copy, off rebased onto SMP_DATA */
 static uint8_t usr_nz[SMP_USER_SLOTS];
-static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3", "USR4", "USR5", "USR6"};
+static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3", "USR4", "USR5"};
 
 #ifndef SMP_USER_XIP                                /* host tests: a RAM image of the slots */
 #define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)

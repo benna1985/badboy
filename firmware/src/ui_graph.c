@@ -1208,6 +1208,17 @@ static uint32_t graph_signature(void)
         for (i = 0; i < NPAT; i++)
             h ^= pbank_used(trk_index(t), i) << i;
     }
+    if (pg->graph == GR_PBANK) {
+        h ^= (uint32_t)t->pat * 40503u + (uint32_t)t->pat_q * 7919u + ui.l_dest * 104729u + (uint32_t)(pbank_dirty | pseq_dirty) * 3571u;
+        for (i = 0; i < NPAT; i++)
+            h ^= pbank_used(trk_index(t), i) << i;
+    }
+    if (pg->graph == GR_ORDER) {
+        uint32_t k = trk_index(t);
+        h ^= ui.o_row * 40503u + pseq.n[k] * 7919u + pseq_mode * 3571u + (uint32_t)pseq_pos[k] * 104729u + song.playing * 1299709u;
+        for (i = 0; i < pseq.n[k]; i++)
+            h = h * 31u + pseq.row[k][i].pat * 101u + pseq.row[k][i].bars;
+    }
     if (pg->graph == GR_SONG) {
         h ^= ui.song_row * 40503u + chain_config.count * 7919u + ui.song_trk * 3571u;
         h = fnv(h, chain_config.row, sizeof chain_config.row);
@@ -1569,12 +1580,13 @@ static void graph_launch(void)
 {
     const track_t *t = TSEL;
     uint32_t i, k = trk_index(t);
+    int pg_pbank = cur_page()->graph == GR_PBANK;     /* (SAVE > PATTERNS: the slot the knobs act on outlined) */
     char b[12] = "T", u[8];
     for (i = 0; i < NPAT; i++) {
         int32_t x = 8 + (int32_t)(i % 8u) * 29, y = 10 + (int32_t)(i / 8u) * 38;
         int cur = i == t->pat, que = t->pat_q && i + 1u == t->pat_q, used = pbank_used(k, i) || cur;
         uint16_t bg = cur ? T_ACCENT : used ? T_RAISE : T_SURF;
-        if (que)
+        if (que || (pg_pbank && i == ui.l_dest))
             cv_rrect(x - 1, y - 1, 29, 34, 5, T_THEME, T_SURF);
         cv_rrect(x, y, 27, 32, 4, bg, que ? T_THEME : T_SURF);
         fmt_int(u, (int32_t)i + 1);
@@ -1585,6 +1597,37 @@ static void graph_launch(void)
     str_cpy(b + 2, t->pat_q ? "  NEXT " : "", 12);
     if (t->pat_q)
         fmt_int(b + str_len(b), (int32_t)t->pat_q);
+    if (pg_pbank)
+        str_cpy(b + str_len(b), (pbank_dirty | pseq_dirty) ? "  NOT SAVED" : "  SAVED", 14);
+    cv_text_on(10, 90, &AF_S, b, T_MID, T_SURF);
+}
+/* GLO > ORDER: the selected track's rows (pattern x bars) as cells, 8 a line; the cursor outlined, the one playing in the accent */
+static void graph_order(void)
+{
+    uint32_t i, k = song.sel % NTRK, n = pseq.n[k], row = ui.o_row > n ? n : ui.o_row;
+    char b[16], u[8];
+    for (i = 0; i < PSEQ_MAX; i++) {
+        int32_t x = 8 + (int32_t)(i % 8u) * 29, y = 6 + (int32_t)(i / 8u) * 20;
+        int cur = i == row, on = i < n, play = on && song.playing && pseq_mode == PSEQ_PLAY && i == pseq_pos[k];
+        uint16_t bg = play ? T_ACCENT : on ? T_RAISE : T_SURF;
+        if (cur)
+            cv_rrect(x - 1, y - 1, 29, 19, 4, T_THEME, T_SURF);
+        cv_rrect(x, y, 27, 17, 3, bg, cur ? T_THEME : T_SURF);
+        if (on) {
+            fmt_int(u, (int32_t)pseq.row[k][i].pat + 1);
+            str_cpy(b, u, 4);
+            str_cpy(b + str_len(b), "x", 2);
+            fmt_int(u, (int32_t)pseq.row[k][i].bars);
+            str_cpy(b + str_len(b), u, 4);
+            cv_text_in(x, y + 3, 27, &AF_S, b, play ? T_INK : T_TEXT, bg);
+        } else if (i == n) {
+            cv_text_in(x, y + 3, 27, &AF_S, "+", T_DIM, bg);
+        }
+    }
+    b[0] = 'T';
+    b[1] = (char)('1' + k);
+    b[2] = 0;
+    str_cpy(b + 2, pseq_mode == PSEQ_REC ? "  REC" : pseq_mode == PSEQ_PLAY ? "  PLAY" : "  OFF", 10);
     cv_text_on(10, 90, &AF_S, b, T_MID, T_SURF);
 }
 static void graph_slots(void)
@@ -2347,8 +2390,13 @@ static void draw_graph(void)
             graph_song();
             break;
         case GR_LAUNCH:
+        case GR_PBANK:
             cv_oy = 0;
             graph_launch();
+            break;
+        case GR_ORDER:
+            cv_oy = 0;
+            graph_order();
             break;
         case GR_PATS:
             cv_oy = 0;

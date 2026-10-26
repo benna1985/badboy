@@ -190,11 +190,11 @@ int main(int argc, char **argv)
         const smp_set_t *s = &SMP_SETS[0];
         const smp_zone_t *z = &SMP_ZONES[s->z0];
         uint32_t bytes = 0, ok = s->nz == 5u;
-        check("PIANO: SET 0, its aliases 1, 3 and 4 the same zones; FLUTE 2, the 13 basses 21..33, USR1..6 34..39",
+        check("PIANO: SET 0, its aliases 1, 3 and 4 the same zones; FLUTE 2, the 13 basses 21..33, USR1..5 34..38",
               SMP_NSETS == 34u && str_eq(SMP_SETS[0].name, "PIANO") && SMP_SETS[1].z0 == s->z0 && SMP_SETS[4].z0 == s->z0 &&
               SMP_SETS[3].z0 == s->z0 && SMP_SETS[1].nz == s->nz && SMP_SETS[4].nz == s->nz && SMP_SETS[3].nz == s->nz &&
               str_eq(SMP_SETS[2].name, "FLUTE") && str_eq(SMP_SETS[21].name, "808") && str_eq(SMP_SETS[33].name, "SFALL") &&
-              str_eq(SMP_ALL_NAMES[34], "USR1") && ENG_SAMPLE.edit[0].max == 39 && str_eq(SMP_ALL_NAMES[39], "USR6") &&
+              str_eq(SMP_ALL_NAMES[34], "USR1") && ENG_SAMPLE.edit[0].max == 38 && str_eq(SMP_ALL_NAMES[38], "USR5") &&
               ENG_SAMPLE.npresets == 34u);
         for (i = 0; ok && i < 5u; i++) {
             bytes += (z[i].n + 1u) / 2u;

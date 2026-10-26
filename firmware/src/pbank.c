@@ -44,9 +44,12 @@ static pbank_pat_t *pbank_alloc(uint32_t k, uint32_t i)   /* the slot's entry, t
         }
     return 0;
 }
+static uint8_t pbf_req;                    /* SAVE > PATTERNS asked: 1 write the bank to flash, 2 read it (pbank_flash.c pbf_poll) */
 static uint8_t pbank_dirty;                /* bit k: track k's bank differs from flash */
 static uint8_t pbank_flash_cur[NTRK];      /* (pbank_store.c) */
 
+static void pseq_bar(void);
+static void pseq_stop(void);
 static void pbank_blank(step_t *s)         /* ui.c step_clear */
 {
     s->n = 0;
@@ -157,11 +160,16 @@ static void pbank_bar(void)
     for (i = 0; i < NTRK; i++)
         if (trk[i].pat_q)
             pbank_switch(&trk[i], (uint32_t)trk[i].pat_q - 1u);
+    pseq_bar();
 }
 /* STOP: what is queued happens (the next PLAY starts it) */
 static void pbank_stop(void)
 {
-    pbank_bar();
+    uint32_t i;
+    for (i = 0; i < NTRK; i++)
+        if (trk[i].pat_q)
+            pbank_switch(&trk[i], (uint32_t)trk[i].pat_q - 1u);
+    pseq_stop();
 }
 /* slot idx of track t emptied (the live pattern too: an empty one, its sound kept) */
 static void pbank_clear(track_t *t, uint32_t idx)
@@ -197,4 +205,79 @@ static int pbank_copy(track_t *t, uint32_t src, uint32_t dst)   /* 0: BANK FULL 
     if (t->pat == dst)
         pbank_load(t, dst);
     return 1;
+}
+
+/* ---- the pattern ORDER (GLO > ORDER): per track, a list of rows {pattern, bars}. PLAY follows it (each track on its own
+ * row count, looping); REC writes it from the launches made while playing (a row per run of bars on one pattern). Not
+ * while a SONG plays. Rows are edited on the page (bars 0 deletes). Saved with the bank (pbank_flash.c). */
+#define PSEQ_MAX 32
+#define PSEQ_OFF 0u
+#define PSEQ_PLAY 1u
+#define PSEQ_REC 2u
+typedef struct { uint8_t pat, bars; } pseq_row_t;      /* bars 1..99 */
+typedef struct { uint8_t n[NTRK]; pseq_row_t row[NTRK][PSEQ_MAX]; } pseq_blob_t;
+_Static_assert(sizeof(pseq_blob_t) % 4u == 0u, "pseq_blob_t is written in words");
+static pseq_blob_t pseq;
+static uint8_t pseq_mode;                              /* PSEQ_OFF / PLAY / REC (REC: the next PLAY records) */
+static uint8_t pseq_pos[NTRK], pseq_left[NTRK];        /* the row playing, the bars it has left */
+static uint8_t pseq_dirty;                             /* the order changed since the flash (bit k) */
+static int pseq_live(void) { return pseq_mode != PSEQ_OFF && !chain.running && !chain.armed; }
+
+static void pseq_enter(track_t *t, uint32_t row)       /* track t's row `row` starts now */
+{
+    uint32_t k = trk_index(t);
+    pseq_pos[k] = (uint8_t)row;
+    pseq_left[k] = pseq.row[k][row].bars ? pseq.row[k][row].bars : 1u;
+    pbank_switch(t, pseq.row[k][row].pat);
+}
+/* PLAY pressed (seq_start, before the tracks restart): PLAY mode: each track starts its first row; REC: a new order begins
+ * with the pattern each track plays now */
+static void pseq_start(void)
+{
+    uint32_t k;
+    if (!pseq_live())
+        return;
+    for (k = 0; k < NTRK; k++) {
+        if (pseq_mode == PSEQ_REC) {
+            pseq.n[k] = 1;
+            pseq.row[k][0].pat = trk[k].pat;
+            pseq.row[k][0].bars = 1;
+            pseq_dirty |= (uint8_t)(1u << k);
+        } else if (pseq.n[k]) {
+            pseq_enter(&trk[k], 0);
+        }
+    }
+}
+/* a bar line, after what was launched has started (pbank_bar) */
+static void pseq_bar(void)
+{
+    uint32_t k;
+    if (!pseq_live())
+        return;
+    for (k = 0; k < NTRK; k++) {
+        if (pseq_mode == PSEQ_REC) {
+            pseq_row_t *r;
+            if (!pseq.n[k])
+                continue;
+            r = &pseq.row[k][pseq.n[k] - 1u];
+            if (r->pat == trk[k].pat && r->bars < 99u)
+                r->bars++;
+            else if (pseq.n[k] < PSEQ_MAX) {
+                pseq.row[k][pseq.n[k]].pat = trk[k].pat;
+                pseq.row[k][pseq.n[k]].bars = 1;
+                pseq.n[k]++;
+            }
+        } else if (pseq.n[k]) {
+            if (pseq_pos[k] >= pseq.n[k])                     /* (rows edited meanwhile) */
+                pseq_enter(&trk[k], 0);
+            else if (--pseq_left[k] == 0u)
+                pseq_enter(&trk[k], (pseq_pos[k] + 1u) % pseq.n[k]);
+        }
+    }
+}
+/* STOP: a recording ends (its order plays next time) */
+static void pseq_stop(void)
+{
+    if (pseq_mode == PSEQ_REC)
+        pseq_mode = PSEQ_PLAY;
 }

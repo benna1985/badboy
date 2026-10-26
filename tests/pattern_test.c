@@ -126,6 +126,129 @@ int main(void)
                 pbank_idx[k][i] = 0;
         bad += check("BANK FULL: the shared entries used up, the next is refused", ok);
     }
+
+    /* ---- GLO > LAUNCH on the white keys, then the ORDER: record the launches, play them back, edit the rows ---- */
+    ui_power_on();
+    t = &trk[0];
+    my_steps(t);
+    go_page(GR_LAUNCH); frame();
+    tap_key(key_at(0, 2));                            /* stopped: the third white key = pattern 3, at once */
+    ok = t->pat == 2 && trk[0].pat_q == 0;
+    bad += check("LAUNCH: a white key launches its pattern (stopped: at once)", ok);
+    ok = (launch_leds() & (1u << key_at(0, 2))) && !(launch_leds() & (1u << key_at(0, 0)));
+    bad += check("  its LED shows the pattern playing", ok);
+    tap_key(key_at(0, 0));
+    t->step[2].n = 1; t->step[2].note[0] = 66; t->step[2].time = ST_NOTE;       /* pattern 1 gets a note */
+    memset(pbank_idx, 0, sizeof pbank_idx);
+    memset(&pseq, 0, sizeof pseq);
+    pbank_launch(t, 0);
+    pseq_mode = PSEQ_REC;
+    seq_start();
+    ok = pseq.n[0] == 1 && pseq.row[0][0].pat == 0 && pseq.row[0][0].bars == 1 && pseq.n[1] == 1;
+    bad += check("ORDER REC: PLAY starts a new order with the pattern each track is on", ok);
+    pbank_launch(t, 3);                               /* queued: the next bar line */
+    to_bar();                                         /* bar 2 starts: pattern 4 */
+    to_bar();                                         /* bar 3: still 4 */
+    pbank_launch(t, 0);
+    to_bar();                                         /* bar 4: back on 1 */
+    ok = pseq.n[0] == 3 && pseq.row[0][0].pat == 0 && pseq.row[0][0].bars == 1 && pseq.row[0][1].pat == 3 &&
+         pseq.row[0][1].bars == 2 && pseq.row[0][2].pat == 0 && pseq.row[0][2].bars == 1;
+    ok &= pseq.n[1] == 1 && pseq.row[1][0].bars == 4;
+    bad += check("  each launch a row: pattern 1 x1, pattern 4 x2, pattern 1 x1; an untouched track one long row", ok);
+    seq_stop();
+    ok = pseq_mode == PSEQ_PLAY;
+    bad += check("  STOP ends the recording: MODE is PLAY", ok);
+    pbank_launch(t, 5);
+    pseq_mode = PSEQ_PLAY;
+    seq_start();
+    ok = t->pat == 0 && pseq_pos[0] == 0 && pseq_left[0] == 1;
+    bad += check("ORDER PLAY: PLAY starts row 1 (its pattern)", ok);
+    to_bar();
+    ok = t->pat == 3 && pseq_pos[0] == 1 && pseq_left[0] == 2;
+    to_bar();
+    ok &= t->pat == 3 && pseq_left[0] == 1;
+    to_bar();
+    ok &= t->pat == 0 && pseq_pos[0] == 2;
+    to_bar();
+    ok &= t->pat == 0 && pseq_pos[0] == 0 && t->step[2].note[0] == 66;
+    bad += check("  the rows follow at each bar line (1, 4, 4, 1) and loop", ok);
+    seq_stop();
+    pseq_mode = PSEQ_OFF;
+    seq_start();
+    ok = pseq_pos[0] == 0 && t->pat == 0;
+    for (i = 0; i < 4u; i++) to_bar();
+    ok &= t->pat == 0;
+    seq_stop();
+    bad += check("ORDER OFF: the order is left alone while the launches stay manual", ok);
+
+    /* the page: ROW, PAT, BARS, MODE */
+    go_page(GR_ORDER); frame();
+    pseq_mode = PSEQ_OFF;
+    ui.o_row = 0;
+    turn(EN_K1, 1);
+    ok = ui.o_row == 1u;
+    turn(EN_K2, 2);
+    ok &= pseq.row[0][1].pat == 5;
+    turn(EN_K3, 3);
+    ok &= pseq.row[0][1].bars == 5;
+    bad += check("ORDER page: KNOB 1 the row, 2 its pattern, 3 its bars", ok);
+    turn(EN_K1, 5);
+    ok = ui.o_row == 3u && pseq.n[0] == 3;           /* + ADD: one past the last row */
+    turn(EN_K3, 1);
+    ok &= pseq.n[0] == 4 && pseq.row[0][3].pat == pseq.row[0][2].pat && pseq.row[0][3].bars == 2;
+    bad += check("  + ADD: turning PAT or BARS there makes a new row like the last", ok);
+    turn(EN_K3, -5);
+    ok = pseq.n[0] == 3 && ui.o_row == 3u;
+    bad += check("  BARS below 1 deletes the row", ok);
+    turn(EN_K4, 1);
+    ok = pseq_mode == PSEQ_PLAY;
+    turn(EN_K4, 1);
+    ok &= pseq_mode == PSEQ_REC;
+    turn(EN_K4, 5);
+    ok &= pseq_mode == PSEQ_REC;
+    turn(EN_K4, -2);
+    ok &= pseq_mode == PSEQ_OFF;
+    bad += check("  MODE: OFF, PLAY, REC", ok);
+    {
+        uint32_t n0 = pseq.n[0];
+        pseq_mode = PSEQ_PLAY;
+        seq_start();
+        turn(EN_K4, 1);
+        ok = pseq_mode == PSEQ_PLAY;                   /* not while playing */
+        turn(EN_K1, -9); turn(EN_K2, 1); turn(EN_K3, 1);
+        ok &= pseq.n[0] == n0;                         /* rows still editable while PLAY plays */
+        pseq.n[0] = 1;
+        to_bar();                                      /* a row index past the end after an edit: back to row 1 */
+        ok &= pseq_pos[0] == 0;
+        seq_stop();
+        bad += check("  while playing: MODE stays; rows can be edited and the position stays valid", ok);
+    }
+
+    /* SAVE > PATTERNS: SLOT, LOAD / STORE, READ / WRITE */
+    go_page(GR_PBANK); frame();
+    memset(pbank_idx, 0, sizeof pbank_idx);
+    pbank_launch(t, 0);
+    t->step[7].n = 1; t->step[7].note[0] = 70; t->step[7].time = ST_NOTE;
+    ui.l_dest = 0;
+    turn(EN_K1, 4);
+    ok = ui.l_dest == 4u;
+    turn(EN_K2, 1);
+    ok &= pbank_get(0, 4) && pbank_get(0, 4)->step[7].note[0] == 70;
+    bad += check("PATTERNS: KNOB 1 the slot, KNOB 2 right stores the playing pattern in it", ok);
+    turn(EN_K2, -1);
+    ok = t->pat == 4 && t->step[7].note[0] == 70;
+    bad += check("  KNOB 2 left loads it", ok);
+    turn(EN_K3, 1);
+    ok = pbf_req == 1u;
+    pbf_req = 0;
+    turn(EN_K3, -1);
+    ok &= pbf_req == 2u;
+    pbf_req = 0;
+    seq_start();
+    turn(EN_K3, 1);
+    ok &= pbf_req == 0;
+    seq_stop();
+    bad += check("  KNOB 3 right asks for a WRITE, left a READ (not while playing)", ok);
     printf("%s\n", bad ? "PATTERN TEST FAILED" : "pattern tests passed");
     return bad != 0;
 }

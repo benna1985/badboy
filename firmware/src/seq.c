@@ -827,6 +827,7 @@ static void seq_start(void)
     uint32_t i;
     motion_begin();
     chain_start();
+    pseq_start();                                  /* GLO > ORDER: PLAY starts each track's first row, REC a new order */
     for (i = 0; i < NTRK; i++) {                   /* every track from its step 0, together */
         track_t *t = &trk[i];
         t->seq_idx = (uint16_t)(t->p[P_SLEN] - 1);

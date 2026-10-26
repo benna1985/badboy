@@ -982,6 +982,31 @@ static void draw_columns(void)
         draw_column(3, "WHEN", ui.l_now ? "NOW" : "BAR", "", VAL(3u), -1, ICON_AUTO);
         return;
     }
+    if (cur_page()->graph == GR_PBANK) {            /* SLOT, LOAD / STORE, READ / WRITE (ui_input.c pbank_knob) */
+        fmt_int(val, (int32_t)ui.l_dest + 1);
+        draw_column(0, "SLOT", val, "", VAL(0u), -1, ICON_AUTO);
+        draw_column(1, "PAT", "LD/ST", "", VAL(1u), -1, ICON_AUTO);
+        draw_column(2, "FLASH", "RD/WR", "", song.playing ? T_DIM : VAL(2u), -1, ICON_AUTO);
+        return;
+    }
+    if (cur_page()->graph == GR_ORDER) {            /* ROW, PAT, BARS, MODE (ui_input.c order_knob) */
+        uint32_t k = song.sel % NTRK, n = pseq.n[k], row = ui.o_row > n ? n : ui.o_row;
+        char pv[4], bv[4];
+        if (row < n) {
+            fmt_int(val, (int32_t)row + 1);
+            fmt_int(pv, (int32_t)pseq.row[k][row].pat + 1);
+            fmt_int(bv, (int32_t)pseq.row[k][row].bars);
+        } else {
+            str_cpy(val, "ADD", sizeof val);
+            str_cpy(pv, "-", sizeof pv);
+            str_cpy(bv, "-", sizeof bv);
+        }
+        draw_column(0, "ROW", val, "", VAL(0u), -1, trk_icon(song.sel, 1));
+        draw_column(1, "PAT", pv, "", VAL(1u), -1, ICON_AUTO);
+        draw_column(2, "BARS", bv, "", VAL(2u), -1, ICON_AUTO);
+        draw_column(3, "MODE", pseq_mode == PSEQ_REC ? "REC" : pseq_mode == PSEQ_PLAY ? "PLAY" : "OFF", "", VAL(3u), -1, ICON_AUTO);
+        return;
+    }
     if (cur_page()->graph == GR_SONG) {             /* SECTION, TRACK, its PAT (A..D, -), REPS (the section's) */
         uint32_t row = ui.song_row < CHAIN_ROWS ? ui.song_row : CHAIN_ROWS - 1u, k = ui.song_trk % NTRK, sl;
         int used = row < chain_config.count;

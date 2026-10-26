@@ -643,6 +643,102 @@ static void launch_knob(uint32_t slot, int32_t steps)
     }
     ui.force = 1;
 }
+/* SAVE > PATTERNS: KNOB 1 the slot, 2 right STORE the playing pattern in it / left LOAD it, 3 right WRITE the bank (and
+ * the order) to flash / left READ it back (both when stopped: pbank_flash.c pbf_poll) */
+static void pbank_knob(uint32_t slot, int32_t steps)
+{
+    track_t *t = TSEL;
+    char m[24];
+    if (slot == 0u) {
+        ui.l_dest = (uint8_t)clamp((int32_t)ui.l_dest + steps, 0, NPAT - 1);
+    } else if (slot == 1u) {
+        if (chain_busy() || (steps > 0 && song.playing)) {
+            ui_message(chain_busy() ? "SONG PLAYING" : "STOP TO EDIT");
+            return;
+        }
+        if (steps > 0) {
+            if (!pbank_copy(t, t->pat, ui.l_dest)) {
+                ui_message("BANK FULL");
+                return;
+            }
+            str_cpy(m, "STORED IN ", 12);
+        } else {
+            fm1_irq_off();
+            (void)pbank_launch(t, ui.l_dest);
+            fm1_irq_on();
+            if (!t->pat_q && t->pat != ui.l_dest) {
+                ui_message("BANK FULL");
+                return;
+            }
+            str_cpy(m, "LOADED ", 12);
+        }
+        fmt_int(m + str_len(m), (int32_t)ui.l_dest + 1);
+        ui_message(m);
+    } else if (slot == 2u) {
+        if (song.playing || chain_busy()) {
+            ui_message("STOP FIRST");
+            return;
+        }
+        pbf_req = steps > 0 ? 1u : 2u;
+        ui_message(steps > 0 ? "WRITING - DO NOT POWER OFF" : "READING");
+    }
+    ui.force = 1;
+}
+/* GLO > ORDER (ui.c): KNOB 1 the row (one past the last: + ADD), 2 its pattern, 3 its bars (below 1 deletes it), 4 MODE:
+ * OFF / PLAY (PLAY starts each track's list) / REC (the next PLAY records the launches). The selected track's list */
+static void order_knob(uint32_t slot, int32_t steps)
+{
+    uint32_t k = song.sel % NTRK, n = pseq.n[k];
+    uint32_t row = ui.o_row;
+    pseq_row_t *r;
+    if (slot == 3u) {
+        if (song.playing) {
+            ui_message("STOP TO CHANGE");
+            return;
+        }
+        pseq_mode = (uint8_t)clamp((int32_t)pseq_mode + steps, 0, 2);
+        ui.force = 1;
+        return;
+    }
+    if (row > n)
+        row = n;
+    if (slot == 0u) {
+        ui.o_row = (uint8_t)clamp((int32_t)row + steps, 0, n < PSEQ_MAX ? (int32_t)n : (int32_t)PSEQ_MAX - 1);
+        ui.force = 1;
+        return;
+    }
+    if (pseq_mode == PSEQ_REC && song.playing) {
+        ui_message("RECORDING");
+        return;
+    }
+    if (row == n) {                                     /* + ADD: a row like the last one (or the pattern playing) */
+        if (n >= PSEQ_MAX) {
+            ui_message("ORDER FULL");
+            return;
+        }
+        fm1_irq_off();
+        pseq.row[k][n].pat = n ? pseq.row[k][n - 1u].pat : trk[k].pat;
+        pseq.row[k][n].bars = 1;
+        pseq.n[k] = (uint8_t)(n + 1u);
+        fm1_irq_on();
+    }
+    r = &pseq.row[k][row];
+    if (slot == 1u) {
+        r->pat = (uint8_t)clamp((int32_t)r->pat + steps, 0, NPAT - 1);
+    } else if ((int32_t)r->bars + steps < 1) {          /* below 1 bar: the row goes */
+        uint32_t i;
+        fm1_irq_off();
+        for (i = row; i + 1u < pseq.n[k]; i++)
+            pseq.row[k][i] = pseq.row[k][i + 1u];
+        pseq.n[k]--;
+        fm1_irq_on();
+        ui_message("ROW DELETED");
+    } else {
+        r->bars = (uint8_t)clamp((int32_t)r->bars + steps, 1, 99);
+    }
+    pseq_dirty |= (uint8_t)(1u << k);
+    ui.force = 1;
+}
 /* the key LEDs of SONG: the key of the selected cell's slot (none for "-" and on + ADD) */
 static uint32_t song_leds(void)
 {
@@ -1089,6 +1185,14 @@ static void edit_param(uint32_t slot, int32_t steps)
         launch_knob(slot, steps);
         return;
     }
+    if (pg->graph == GR_PBANK) {                      /* SLOT, LOAD / STORE, READ / WRITE (flash) */
+        pbank_knob(slot, steps);
+        return;
+    }
+    if (pg->graph == GR_ORDER) {                      /* ROW, PAT, BARS, MODE */
+        order_knob(slot, steps);
+        return;
+    }
     if (pg->graph == GR_SONG) {                       /* KNOB 1 SECTION, 2 TRACK, 3 PAT (A..D, -), 4 REPS */
         chain_row_t *r;
         if (slot == 0u) {
@@ -1424,7 +1528,7 @@ static void presets_turn(int32_t s)
     }
     if (ui.home || g == GR_BROWSE) {
         preset_step(s);
-    } else if (g == GR_ROLL || g == GR_USER || g == GR_SLOTS || g == GR_PATS || g == GR_SONG || g == GR_EVENTS || g == GR_LAUNCH) {
+    } else if (g == GR_ROLL || g == GR_USER || g == GR_SLOTS || g == GR_PATS || g == GR_SONG || g == GR_EVENTS || g == GR_LAUNCH || g == GR_PBANK || g == GR_ORDER) {
         edit_param(0, s);                                 /* KNOB 1's (STEP: STOP TO EDIT while a song plays) */
         ui.hot_col = 0;
         ui.hot_t = 40;
@@ -1945,7 +2049,7 @@ static void ui_input(void)
         }
         if (ui.home || pg->scope == SC_STEP || pg->scope == SC_TRK || page_desc(pg, k, &hv) ||
             ((pg->graph == GR_USER || pg->graph == GR_MOD || pg->graph == GR_PATS) && k == 0u)
-            || pg->graph == GR_SONG || pg->graph == GR_LAUNCH || (pg->graph == GR_SLICES && k < 2u) || fop_page(pg->graph)) {   /* (not an empty
+            || pg->graph == GR_SONG || pg->graph == GR_LAUNCH || pg->graph == GR_PBANK || pg->graph == GR_ORDER || (pg->graph == GR_SLICES && k < 2u) || fop_page(pg->graph)) {   /* (not an empty
                                                                                                           * column) */
             ui.hot_col = (uint8_t)k;
             ui.hot_t = 40;

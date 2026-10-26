@@ -512,10 +512,10 @@ static int test_sound_loads(void)
                      str_eq(sd->names[1], "PIANO") && enum_step(sd, 0, 1) == 2 && enum_step(sd, 2, 1) == 0 &&
                      enum_step(sd, 1, 2) == 2 && enum_orig(sd, 1) == 0 && enum_orig(sd, 5) == 5 &&
                      enum_orig(&ENGINES[8]->edit[0], 1) == 0);
-        bad += check("SAMPLE / GRAIN SET 4 (PERC, retired): a PIANO alias, knobs skip it, USR1..6 follow the 16 stabs and 13 basses at 34..39",
+        bad += check("SAMPLE / GRAIN SET 4 (PERC, retired): a PIANO alias, knobs skip it, USR1..5 follow the 16 stabs and 13 basses at 34..38",
                      str_eq(sd->names[SMP_SET_PERC], "PIANO") && enum_orig(sd, SMP_SET_PERC) == 0 &&
                      enum_step(sd, 2, 3) == 5 && enum_step(sd, 5, 4) == 2 && str_eq(sd->names[34], "USR1") &&
-                     str_eq(sd->names[36], "USR3") && str_eq(sd->names[37], "USR4") && str_eq(sd->names[39], "USR6") && sd->max == 39 &&
+                     str_eq(sd->names[36], "USR3") && str_eq(sd->names[37], "USR4") && str_eq(sd->names[38], "USR5") && sd->max == 38 &&
                      enum_orig(&ENGINES[8]->edit[0], SMP_SET_PERC) == 0 && SMP_SETS[SMP_SET_PERC].z0 == SMP_SETS[0].z0);
     }
     {   /* the stabs, the basses, SLICE's sounds and the factory BASS category load MONO (a key plays again) and dry */
@@ -2664,7 +2664,7 @@ static int test_presets_knob(void)
                 sel_ok &= song.g[G_SLOT] == slot + 1 && same_snd && same_steps;
             } else if (g == GR_PATS) {
                 sel_ok &= pat_pick() == ppick + 1u && same_snd && same_steps;
-            } else if (g == GR_SONG || g == GR_LAUNCH) {
+            } else if (g == GR_SONG || g == GR_LAUNCH || g == GR_PBANK || g == GR_ORDER) {
                 sel_ok &= same_snd && same_steps && ui.page == i;
             } else if (g == GR_EVENTS) {               /* (AUTOMATION: its row, PLAY's to the first record's) */
                 sel_ok &= same_snd && same_steps && ui.page == i && ui.ev_row == 1u;
@@ -2718,7 +2718,7 @@ static int steps_but(const track_t *t, const step_t *ref, uint32_t at, const ste
 static uint32_t auto_cur(void) { uint16_t rw[EV_ROWS]; return ev_cur(rw, 0); }
 static int test_page_cycles(void)
 {
-    static const char *const SAVE_CYC[6] = {"USER", "PRESETS", "PHRASES", "PROJECT", "TOOLS", "USER"};   /* (1.5, #173) */
+    static const char *const SAVE_CYC[7] = {"USER", "PRESETS", "PHRASES", "PROJECT", "PATTERNS", "TOOLS", "USER"};   /* (1.5, #173) */
     int bad = 0, ok = 1;
     uint32_t i, n0;
     step_t ref[NSTEP], want;
@@ -2726,16 +2726,16 @@ static int test_page_cycles(void)
     uint16_t rw[EV_ROWS];
     /* the cycles: each button's taps, in order */
     ui_power_on();
-    for (i = 0; i < 6u; i++) {
+    for (i = 0; i < 7u; i++) {
         press(B_SAVE); frames(320);
         ok &= !ui.home && cur_page()->fam == FAM_SAVE && str_eq(cur_page()->title, SAVE_CYC[i]);
     }
-    bad += check("1.5 (#173): SAVE cycles USER > PRESETS > PHRASES > PROJECT > TOOLS > USER", ok);
+    bad += check("1.5 (#173): SAVE cycles USER > PRESETS > PHRASES > PROJECT > PATTERNS > TOOLS > USER", ok);
     ok = 1;
     for (i = 0; i < NPAGES; i++) {                       /* every page in a family its button reaches, and its LED */
         uint32_t f = PAGES[i].fam;
         ok &= f != FAM_SEQ || PAGES[i].graph == GR_ROLL || PAGES[i].graph == GR_EVENTS || str_eq(PAGES[i].title, "ROLL");
-        ok &= f != FAM_GLO || PAGES[i].graph == GR_SONG || PAGES[i].graph == GR_LAUNCH;   /* (1.2: SONG, 1.6: LAUNCH) */
+        ok &= f != FAM_GLO || PAGES[i].graph == GR_SONG || PAGES[i].graph == GR_LAUNCH || PAGES[i].graph == GR_ORDER;   /* (1.2: SONG, 1.6: LAUNCH, ORDER) */
         ok &= f != FAM_TRK || PAGES[i].graph == GR_TRK || str_eq(PAGES[i].title, "CLOCK");   /* HOME's: MIXER CLOCK */
         ok &= PAGES[i].graph != GR_TRK || f == FAM_TRK;
         ui_power_on(); ui.home = 0; ui.page = (uint8_t)i; page_entered();
@@ -2775,14 +2775,16 @@ static int test_page_cycles(void)
     open_family(FAM_SEQ); ok &= cur_page()->graph == GR_ROLL;
     open_family(FAM_ENV); ok &= str_eq(cur_page()->title, "ENV");
     open_family(FAM_SAVE); ok &= str_eq(cur_page()->title, "USER");
-    open_family(FAM_GLO); open_family(FAM_GLO);          /* SONG, LAUNCH (1.6), and round */
+    open_family(FAM_GLO); open_family(FAM_GLO);          /* SONG, LAUNCH (1.6), ORDER, and round */
     ok &= str_eq(cur_page()->title, "LAUNCH");
+    open_family(FAM_GLO);
+    ok &= str_eq(cur_page()->title, "ORDER");
     open_family(FAM_GLO);
     ok &= str_eq(cur_page()->title, "SONG");
     go_home(); open_family(FAM_GLO); ok &= str_eq(cur_page()->title, "SONG");
     for (i = 0; i < 256u; i++) {                         /* any remembered index (the old GLOBAL 25, SYSTEM 27, ..) */
         go_home(); ui.fam_last[FAM_GLO] = (uint8_t)i; open_family(FAM_GLO);
-        ok &= (str_eq(cur_page()->title, "SONG") || (PAGES[i].graph == GR_LAUNCH && str_eq(cur_page()->title, "LAUNCH"))) &&
+        ok &= (str_eq(cur_page()->title, "SONG") || (PAGES[i].graph == GR_LAUNCH && str_eq(cur_page()->title, "LAUNCH")) || (PAGES[i].graph == GR_ORDER && str_eq(cur_page()->title, "ORDER"))) &&
               ui.fam_last[FAM_GLO] == ui.page;
         go_home(); ui.fam_last[FAM_TRK] = (uint8_t)i; press(B_HOME);
         ok &= cur_page()->graph == GR_TRK && !ui.home;
@@ -3793,7 +3795,7 @@ static int test_slices(void)
     n = slice_count();
     p0 = TSEL->p[P_E1];
     turn(EN_K1, 2); turn(EN_K2, 3);
-    ok = n == 16u && slice_sel() == 2u && TSEL->p[P_E1] == p0 && msg_is("SRC USR1-6 TO EDIT") && !slice_act_ready(2);
+    ok = n == 16u && slice_sel() == 2u && TSEL->p[P_E1] == p0 && msg_is("SRC USR1-5 TO EDIT") && !slice_act_ready(2);
     bad += check("SLICES on PIANO: its 16 slices shown, KNOB 1 picks; edits need USR1-3 (DIV unchanged)", ok);
     TSEL->p[P_E0] = 2;                               /* SRC USR2, empty: no slices (a sine plays): NO SAMPLE */
     frame();
@@ -3805,7 +3807,7 @@ static int test_slices(void)
     TSEL->p[P_E0] = 4;                               /* SRC PIANO: its 16 slices shown, no edits */
     frame();
     turn(EN_K2, 1);
-    ok = slice_count() == 16u && TSEL->p[P_E1] == p0 && msg_is("SRC USR1-6 TO EDIT");
+    ok = slice_count() == 16u && TSEL->p[P_E1] == p0 && msg_is("SRC USR1-5 TO EDIT");
     TSEL->p[P_E0] = 0;
     frame();
     bad += check("SLICES on PIANO: its 16 slices shown; edits need USR1-3 (DIV unchanged)", ok);
