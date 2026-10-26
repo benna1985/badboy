@@ -617,6 +617,8 @@ static uint32_t fx_id(uint32_t k)
         return P_ROLL;
     if (k < 4u && TSEL->eng_req % NENGINES == ENGI_SLICE)
         return k == 2u ? P_E2 : P_E3;
+    if (k == 2u)
+        return P_RPIT;                                  /* (not SLICE: the roll's pitch change, ROLL's second knob) */
     return 0xFFu;
 }
 /* GLO > SONG (1.2): the white keys A B C D (A3 B3 C4 D4, white places 2..5: seq.c song_key) set the selected cell's slot;

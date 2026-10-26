@@ -1211,7 +1211,7 @@ static __attribute__((noinline)) void seq_play(track_t *t, uint32_t idx, uint32_
     if (seq_miss(t, s, idx) || seq_rand_pre(t, s))
         skip = SEQ_MISS;
     if (m)
-        motion_step(t, idx, m, skip == SEQ_ROLLED);
+        motion_step(t, idx, m, skip == SEQ_ROLLED, s->time == ST_TIE);
     if (skip == SEQ_ROLLED)
         seq_rand_post(t, s, idx);
     if (t->rskip_n && t->rskip_idx == idx) {

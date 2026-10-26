@@ -120,6 +120,27 @@ int main(void)
     ok = locked(t, 6, P_ROLL);
     with = notes(t, div_samples(2) / CTL * 16u - 1u);
     bad += check("  a ROLL lock on one step: it repeats, the rest of the bar plays as before", ok && with > base);
+    /* a lock lasts the note: step 3 is a TIE of step 3 (index 2): ROLL stays through it, goes back at the next step */
+    t = pattern(2);
+    t->eng_req = 0;
+    t->p[P_ROLL] = 0;
+    motion_set_lock(t, 2, P_ROLL, 3);
+    motion_set_lock(t, 2, P_RPIT, 5);
+    motion.on |= 1u;
+    motion_step(t, 1, &motion, 1, 0);
+    motion_step(t, 2, &motion, 1, 0);
+    ok = t->p[P_ROLL] == 3 && t->p[P_RPIT] == 5;
+    motion_step(t, 3, &motion, 1, 1);                  /* the TIE */
+    ok &= t->p[P_ROLL] == 3 && t->p[P_RPIT] == 5;
+    motion_step(t, 4, &motion, 1, 0);                  /* the next note */
+    ok &= t->p[P_ROLL] == 0 && t->p[P_RPIT] == 0;
+    bad += check("a ROLL / RPIT lock lasts the whole note: held through its TIE steps, back at the next step", ok);
+    go_fx();
+    t->eng_req = 0;
+    ui.cursor = 2;
+    kt(EN_K3, 3);
+    ok = locked(t, 2, P_RPIT) && !locked(t, 2, P_E2);
+    bad += check("STEP FX on a non-SLICE track: KNOB 3 locks the roll's pitch change (RPIT)", ok);
     printf("%s\n", bad ? "STEP FX TEST FAILED" : "step fx tests passed");
     return bad != 0;
 }

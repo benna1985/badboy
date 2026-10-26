@@ -552,7 +552,7 @@ static int keep_test(void)
             motion.event[0].param = P_E7;
             motion.event[0].value = (int8_t)s;
             motion_base_valid = 0;
-            motion_step(t, 3, &motion, 1);
+            motion_step(t, 3, &motion, 1, 0);
             fm6_poll();
             ok &= trk[0].p[P_E7] == FM6_OWN && patch_is(0, x);
         }

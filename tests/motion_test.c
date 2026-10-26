@@ -25,7 +25,7 @@ static int motion_recording(void)
     bad += check("recorded motion plays back at step zero", t->p[P_REV] == 110);
     motion_set_enabled(t, 0);
     bad += check("bypass restores base without deleting automation", t->p[P_REV] == 23 && motion_count(t) == 1u && !motion_enabled(t));
-    motion_set_enabled(t, 1); motion_step(t, 0, &motion, 1);
+    motion_set_enabled(t, 1); motion_step(t, 0, &motion, 1, 0);
     song.rec = 0; t->p[P_REV] = 37; motion_capture(t, P_REV, 37); seq_stop();
     bad += check("manual edits outside recording become the new base", t->p[P_REV] == 37);
     song.rec = 3; seq_start(); seq_tick(t, CTL);

@@ -263,8 +263,9 @@ static __attribute__((noinline)) void motion_unlock(track_t *t, uint32_t step, c
     }
     memset(motion_locked[k], 0, sizeof motion_locked[k]);
 }
-/* step `step` of track t starts (seq.c seq_tick); play: it plays (its chance passed): its locks apply */
-static __attribute__((noinline)) void motion_step(track_t *t, uint32_t step, const motion_store_t *m, uint32_t play)
+/* step `step` of track t starts (seq.c seq_tick); play: it plays (its chance passed): its locks apply. tie: the step is a
+ * TIE of the note before it: the locks stay (a lock lasts the note's whole length, STRCH / PTCH / ROLL of STEP FX too) */
+static __attribute__((noinline)) void motion_step(track_t *t, uint32_t step, const motion_store_t *m, uint32_t play, uint32_t tie)
 {
     uint32_t k = trk_index(t), i, w, any = 0;
     if (!((m->on >> k) & 1u)) return;
@@ -275,7 +276,7 @@ static __attribute__((noinline)) void motion_step(track_t *t, uint32_t step, con
     for (w = 0; w < (P_COUNT + 31u) / 32u; w++)
         any |= motion_locked[k][w];
     if (!step) motion_restore(t);
-    else if (any) motion_unlock(t, step, m);
+    else if (any && !tie) motion_unlock(t, step, m);
     for (i = 0; i < m->count; i++) {
         const motion_event_t *e = &m->event[i];
         uint32_t id = MOTION_ID(e);
