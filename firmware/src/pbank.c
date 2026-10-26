@@ -12,7 +12,8 @@
  * A pattern is stored from RAM into flash by pbank_store.c (pbank_dirty tracks the changed banks).
  * pbank_pat_t is not a project: PROJECT slots and SONG are as before. A project load replaces the live pattern. */
 #define NPAT 16
-#define PAT_MOT 32                       /* automation and locks kept per pattern (the track's 128 are shared by the four) */
+#define PAT_MOT 16                       /* automation and locks kept per pattern (the track's 128 are shared by the four) */
+#define PSLOTS 40                        /* patterns kept in RAM, shared by all tracks (the POOL is full): "BANK FULL" past it */
 typedef struct {
     uint8_t used, qnt, mon, mcount;      /* used: stored; mon: the track's motion was on; mcount: records kept */
     int16_t timing[4];                   /* LEN DIV SWING GATE */
@@ -20,7 +21,29 @@ typedef struct {
     motion_event_t mot[PAT_MOT];         /* (place's track bits are not kept: bank[k] is track k's) */
     step_t step[NSTEP];
 } pbank_pat_t;
-static pbank_pat_t pbank[NTRK][NPAT] __attribute__((section(".pool")));
+static pbank_pat_t pbank_slab[PSLOTS] __attribute__((section(".pool")));
+static uint8_t pbank_idx[NTRK][NPAT];      /* 0: the slot is empty, else its pbank_slab entry + 1 */
+static const pbank_pat_t *pbank_get(uint32_t k, uint32_t i) { return pbank_idx[k][i] ? &pbank_slab[pbank_idx[k][i] - 1u] : 0; }
+static uint32_t pbank_used(uint32_t k, uint32_t i) { return pbank_idx[k][i] != 0; }
+static pbank_pat_t *pbank_alloc(uint32_t k, uint32_t i)   /* the slot's entry, taken if it has none; 0: all PSLOTS are in use */
+{
+    uint32_t a, b, n;
+    uint8_t taken[PSLOTS];
+    if (pbank_idx[k][i])
+        return &pbank_slab[pbank_idx[k][i] - 1u];
+    memset(taken, 0, sizeof taken);
+    for (a = 0; a < NTRK; a++)
+        for (b = 0; b < NPAT; b++)
+            if (pbank_idx[a][b])
+                taken[pbank_idx[a][b] - 1u] = 1;
+    for (n = 0; n < PSLOTS; n++)
+        if (!taken[n]) {
+            memset(&pbank_slab[n], 0, sizeof pbank_slab[n]);
+            pbank_idx[k][i] = (uint8_t)(n + 1u);
+            return &pbank_slab[n];
+        }
+    return 0;
+}
 static uint8_t pbank_dirty;                /* bit k: track k's bank differs from flash */
 static uint8_t pbank_flash_cur[NTRK];      /* (pbank_store.c) */
 
@@ -35,10 +58,12 @@ static void pbank_blank(step_t *s)         /* ui.c step_clear */
 }
 
 /* the live pattern of track t -> its slot */
-static __attribute__((noinline)) void pbank_store(track_t *t)
+static __attribute__((noinline)) int pbank_store(track_t *t)     /* 0: no free entry (BANK FULL), nothing stored */
 {
     uint32_t k = trk_index(t), i, n = 0, f;
-    pbank_pat_t *p = &pbank[k][t->pat % NPAT];
+    pbank_pat_t *p = pbank_alloc(k, t->pat % NPAT);
+    if (!p)
+        return 0;
     memcpy(p->step, t->step, sizeof p->step);
     memcpy(p->timing, &t->p[P_SLEN], sizeof p->timing);
     p->qnt = (uint8_t)(t->p[P_SQNT] != 0);
@@ -55,20 +80,21 @@ static __attribute__((noinline)) void pbank_store(track_t *t)
     p->mcount = (uint8_t)n;
     p->used = 1;
     pbank_dirty |= (uint8_t)(1u << k);
+    return 1;
 }
 
 /* slot idx of track t -> the live pattern (t->pat becomes idx). An empty slot: no steps, no automation, the sound as is */
 static __attribute__((noinline)) void pbank_load(track_t *t, uint32_t idx)
 {
     uint32_t k = trk_index(t), i, n = 0, f;
-    const pbank_pat_t *p = &pbank[k][idx % NPAT];
+    const pbank_pat_t *p = pbank_get(k, idx % NPAT);
     t->pat = (uint8_t)(idx % NPAT);
     seq_release(t);
     t->rat_left = 0;
     t->nd_late = t->nd_early = ND_NONE;
     t->nd_fired = 0;
     t->rh_n = t->rskip_n = 0;
-    if (p->used) {
+    if (p) {
         memcpy(t->step, p->step, sizeof t->step);
         chain_sound_set(t, &p->snd, 1);
         memcpy(&t->p[P_SLEN], p->timing, sizeof p->timing);
@@ -82,7 +108,7 @@ static __attribute__((noinline)) void pbank_load(track_t *t, uint32_t idx)
     for (i = 0; i < motion.count; i++)                   /* the track's records out, the pattern's in */
         if ((motion.event[i].place >> 6) != k)
             motion.event[n++] = motion.event[i];
-    if (p->used)
+    if (p)
         for (i = 0; i < p->mcount && n < MOTION_MAX; i++) {
             motion.event[n] = p->mot[i];
             motion.event[n].place = (uint8_t)(k << 6 | (p->mot[i].place & 63u));
@@ -90,7 +116,7 @@ static __attribute__((noinline)) void pbank_load(track_t *t, uint32_t idx)
         }
     memset(motion.event + n, 0, (MOTION_MAX - n) * sizeof motion.event[0]);
     motion.count = (uint8_t)n;
-    motion.on = (uint8_t)((motion.on & ~(1u << k)) | (p->used && p->mon ? 1u << k : 0u));
+    motion.on = (uint8_t)((motion.on & ~(1u << k)) | (p && p->mon ? 1u << k : 0u));
     motion_full = 0;
     motion_rebase(t);
     motion_unguard(f);
@@ -106,7 +132,8 @@ static void pbank_switch(track_t *t, uint32_t idx)
     t->pat_q = 0;
     if (idx % NPAT == t->pat)
         return;
-    pbank_store(t);
+    if (!pbank_store(t))
+        return;
     pbank_load(t, idx);
 }
 
@@ -141,22 +168,33 @@ static void pbank_clear(track_t *t, uint32_t idx)
 {
     uint32_t k = trk_index(t);
     idx %= NPAT;
-    memset(&pbank[k][idx], 0, sizeof pbank[k][idx]);
+    pbank_idx[k][idx] = 0;
     pbank_dirty |= (uint8_t)(1u << k);
     if (t->pat == idx)
         pbank_load(t, idx);
 }
 /* slot src of track t copied over slot dst (the live pattern first stored); dst becomes the pattern playing if it was */
-static void pbank_copy(track_t *t, uint32_t src, uint32_t dst)
+static int pbank_copy(track_t *t, uint32_t src, uint32_t dst)   /* 0: BANK FULL */
 {
     uint32_t k = trk_index(t);
+    pbank_pat_t *d;
     src %= NPAT;
     dst %= NPAT;
     if (src == dst)
-        return;
-    pbank_store(t);
-    pbank[k][dst] = pbank[k][src];
+        return 1;
+    if (!pbank_store(t))
+        return 0;
+    if (!pbank_get(k, src)) {                            /* an empty slot copied: the destination empties */
+        pbank_idx[k][dst] = 0;
+        d = 0;
+    } else {
+        d = pbank_alloc(k, dst);
+        if (!d)
+            return 0;
+        *d = *pbank_get(k, src);
+    }
     pbank_dirty |= (uint8_t)(1u << k);
     if (t->pat == dst)
         pbank_load(t, dst);
+    return 1;
 }

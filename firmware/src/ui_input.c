@@ -582,6 +582,10 @@ static void launch_do(uint32_t idx)
             (void)pbank_launch(&trk[k], idx);
         fm1_irq_on();
     }
+    if (!trk[song.sel].pat_q && trk[song.sel].pat != idx % NPAT) {     /* the live pattern had no entry to go to */
+        ui_message("BANK FULL");
+        return;
+    }
     fmt_int(m + 4, (int32_t)idx + 1);
     if (song.playing && !ui.l_now && trk[song.sel].pat_q)
         str_cpy(m + str_len(m), " NEXT BAR", 10);
@@ -621,7 +625,10 @@ static void launch_knob(uint32_t slot, int32_t steps)
             return;
         }
         if (steps > 0 && ui.l_dest != t->pat) {
-            pbank_copy(t, t->pat, ui.l_dest);
+            if (!pbank_copy(t, t->pat, ui.l_dest)) {
+                ui_message("BANK FULL");
+                return;
+            }
             str_cpy(m, "COPIED TO ", 12);
         } else if (steps < 0) {
             pbank_clear(t, ui.l_dest);

@@ -1206,7 +1206,7 @@ static uint32_t graph_signature(void)
     if (pg->graph == GR_LAUNCH) {
         h ^= (uint32_t)t->pat * 40503u + (uint32_t)t->pat_q * 7919u + ui.l_all * 3571u + ui.l_now * 1299709u + ui.l_dest * 104729u;
         for (i = 0; i < NPAT; i++)
-            h ^= (uint32_t)pbank[trk_index(t)][i].used << i;
+            h ^= pbank_used(trk_index(t), i) << i;
     }
     if (pg->graph == GR_SONG) {
         h ^= ui.song_row * 40503u + chain_config.count * 7919u + ui.song_trk * 3571u;
@@ -1572,7 +1572,7 @@ static void graph_launch(void)
     char b[12] = "T", u[8];
     for (i = 0; i < NPAT; i++) {
         int32_t x = 8 + (int32_t)(i % 8u) * 29, y = 10 + (int32_t)(i / 8u) * 38;
-        int cur = i == t->pat, que = t->pat_q && i + 1u == t->pat_q, used = pbank[k][i].used || cur;
+        int cur = i == t->pat, que = t->pat_q && i + 1u == t->pat_q, used = pbank_used(k, i) || cur;
         uint16_t bg = cur ? T_ACCENT : used ? T_RAISE : T_SURF;
         if (que)
             cv_rrect(x - 1, y - 1, 29, 34, 5, T_THEME, T_SURF);

@@ -33,14 +33,14 @@ int main(void)
     my_steps(t);
     my_steps(u);
     t->p[P_SLEN] = 16;
-    ok = t->pat == 0 && !t->pat_q && sizeof(pbank_pat_t) * NTRK * NPAT < 70000u;
+    ok = t->pat == 0 && !t->pat_q && sizeof(pbank_slab) < 40000u;
     bad += check("bank: track on pattern 1, nothing queued", ok);
 
     /* stopped: pattern 1 is C4 first; pattern 2 gets its own notes, sound and LEN */
     t->step[0].note[0] = 60;
     t->p[P_PAN] = 11;
     ok = pbank_launch(t, 1) && t->pat == 1;
-    ok &= !step_on(&t->step[0]) && t->p[P_PAN] == 11 && t->eng_req == pbank[0][0].snd.eng;
+    ok &= !step_on(&t->step[0]) && t->p[P_PAN] == 11 && t->eng_req == pbank_get(0, 0)->snd.eng;
     bad += check("stopped: launching an empty slot loads an empty pattern in the same sound", ok);
     t->step[2].note[0] = 70; t->step[2].n = 1; t->step[2].time = ST_NOTE; t->step[2].vel = 90;
     t->p[P_SLEN] = 8;
@@ -95,7 +95,7 @@ int main(void)
     /* copy */
     pbank_launch(t, 1);
     pbank_copy(t, 1, 5);
-    ok = pbank[0][5].used && pbank[0][5].step[2].note[0] == 70 && pbank[0][5].timing[0] == 8 && pbank[0][5].mcount == 1;
+    ok = pbank_get(0, 5) && pbank_get(0, 5)->step[2].note[0] == 70 && pbank_get(0, 5)->timing[0] == 8 && pbank_get(0, 5)->mcount == 1;
     pbank_launch(t, 5);
     ok &= t->pat == 5 && t->step[2].note[0] == 70 && t->eng_req == ENGI_DRUM;
     bad += check("copy: slot 2 over slot 6 (steps, LEN, sound, automation)", ok);
@@ -106,6 +106,26 @@ int main(void)
     ok = !pbank_launch(t, 3) && t->pat == 0;
     chain.running = 0;
     bad += check("a running SONG refuses launches", ok);
+    /* BANK FULL: 40 entries shared; past them a launch / copy is refused and nothing is lost */
+    {
+        uint32_t k, i, n = 0, f = 0;
+        for (k = 0; k < NTRK; k++)
+            for (i = 0; i < NPAT; i++)
+                pbank_idx[k][i] = 0;
+        pbank_launch(t, 0);
+        for (k = 1; k < NTRK; k++)                        /* the other tracks fill every entry but the live slot's */
+            for (i = 0; i < NPAT; i++)
+                if (pbank_alloc(k, i)) n++; else f++;
+        for (i = 1; i < NPAT && n < PSLOTS; i++)
+            if (pbank_alloc(0, i)) n++;
+        ok = n == PSLOTS && !pbank_alloc(0, 0) && !pbank_store(&trk[0]) && !pbank_copy(&trk[0], 0, 2);
+        t->step[0].note[0] = 77; t->step[0].n = 1; t->step[0].time = ST_NOTE;
+        ok &= !pbank_launch(t, 4) || (t->pat == 0 && t->step[0].note[0] == 77);   /* refused: nothing lost */
+        for (k = 0; k < NTRK; k++)
+            for (i = 0; i < NPAT; i++)
+                pbank_idx[k][i] = 0;
+        bad += check("BANK FULL: 40 entries shared by all tracks, the 41st is refused", ok);
+    }
     printf("%s\n", bad ? "PATTERN TEST FAILED" : "pattern tests passed");
     return bad != 0;
 }
