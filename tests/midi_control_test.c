@@ -882,16 +882,16 @@ static int pc_test(void)
     bad += check("  every engine: 0.. its presets in PRESETS' order (no alias twice); past the last ignored", ok);
     set_engine_of(t, ENGI_SAMPLE);
     pc(0, 1); frame();
-    ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "FLUTE");
-    pc(0, 3); frame();
-    ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "BIZ1");   /* (2 AWSM3, 3 BIZ1) */
-    pc(0, 17); frame();
+    ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "AWSM3");
+    pc(0, 2); frame();
+    ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "BIZ1");   /* (1 AWSM3, 2 BIZ1) */
+    pc(0, 16); frame();
     ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "WILD1");
-    pc(0, 18); frame();
+    pc(0, 17); frame();
     ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "808");
-    pc(0, 30); frame();
+    pc(0, 29); frame();
     ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "SFALL");
-    bad += check("  SAMPLE: PC 1 is FLUTE (not PIANO's alias), PC 2.. the rave stabs (the aliases skipped, never DRUM), PC 17 WILD1, PC 18 the basses, 30 SFALL", ok);
+    bad += check("  SAMPLE: PC 1 is AWSM3 (the aliases 1 .. 4 skipped, never DRUM), PC 2.. the rave stabs, PC 16 WILD1, PC 17 the basses, 29 SFALL", ok);
 
     /* DRUM: the kits as KIT steps through them */
     {

@@ -488,11 +488,11 @@ static int test_sound_loads(void)
     project_load(1);
     bad += check("a project load drops the copy and takes none", undo.trk == 0 && undo_depth == 0);
     ui_power_on();
-    bad += check("SAMPLE factory browsing: PIANO FLUTE, then the 16 rave stabs and the 13 basses (the aliases 1, 3 and 4 hidden)",
+    bad += check("SAMPLE factory browsing: PIANO, then the 16 rave stabs and the 13 basses (the aliases 1 .. 4 hidden)",
                  ENGINES[4]->npresets == 34u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
                  str_eq(ENGINES[4]->presets[3].name, "PIANO") && str_eq(ENGINES[4]->presets[5].name, "AWSM3") &&
                  str_eq(ENGINES[4]->presets[20].name, "WILD1") && str_eq(ENGINES[4]->presets[21].name, "808") &&
-                 str_eq(ENGINES[4]->presets[33].name, "SFALL") && SMP_NALIAS == 3);
+                 str_eq(ENGINES[4]->presets[33].name, "SFALL") && SMP_NALIAS == 4);
     {   /* TRANH (SET 1, preset 1) is gone: both are PIANO aliases, kept for old data, never offered */
         const param_desc_t *sd = &ENGINES[4]->edit[0];
         uint32_t all, pos, k, e, pos0, shown = 0;
@@ -508,13 +508,13 @@ static int test_sound_loads(void)
         apply_preset_to(TSEL, 1);
         bad += check("SAMPLE: old SET 1 / preset 1 (TRANH) play PIANO; browsing and knobs skip them",
                      SMP_SETS[1].z0 == SMP_SETS[0].z0 && SMP_SETS[1].nz == SMP_SETS[0].nz && pos == pos0 &&
-                     shown == 31u && e == 4u && k == 2u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&
-                     str_eq(sd->names[1], "PIANO") && enum_step(sd, 0, 1) == 2 && enum_step(sd, 2, 1) == 0 &&
-                     enum_step(sd, 1, 2) == 2 && enum_orig(sd, 1) == 0 && enum_orig(sd, 5) == 5 &&
+                     shown == 30u && e == 4u && k == 5u && TSEL->preset == 0u && TSEL->p[P_E0] == 0 &&
+                     str_eq(sd->names[1], "PIANO") && enum_step(sd, 0, 1) == 5 && enum_step(sd, 5, 4) == 0 &&
+                     enum_step(sd, 1, 2) == 5 && enum_orig(sd, 1) == 0 && enum_orig(sd, 5) == 5 &&
                      enum_orig(&ENGINES[8]->edit[0], 1) == 0);
         bad += check("SAMPLE / GRAIN SET 4 (PERC, retired): a PIANO alias, knobs skip it, USR1..5 follow the 16 stabs and 13 basses at 34..38",
                      str_eq(sd->names[SMP_SET_PERC], "PIANO") && enum_orig(sd, SMP_SET_PERC) == 0 &&
-                     enum_step(sd, 2, 3) == 5 && enum_step(sd, 5, 4) == 2 && str_eq(sd->names[34], "USR1") &&
+                     enum_step(sd, 0, 3) == 5 && enum_step(sd, 5, 4) == 0 && str_eq(sd->names[34], "USR1") &&
                      str_eq(sd->names[36], "USR3") && str_eq(sd->names[37], "USR4") && str_eq(sd->names[38], "USR5") && sd->max == 38 &&
                      enum_orig(&ENGINES[8]->edit[0], SMP_SET_PERC) == 0 && SMP_SETS[SMP_SET_PERC].z0 == SMP_SETS[0].z0);
     }
@@ -530,7 +530,7 @@ static int test_sound_loads(void)
         ok = TSEL->p[P_VOICE] == V_POLY && TSEL->p[P_CHOR] == 24 && TSEL->p[P_DLY] == 28 && TSEL->p[P_REV] == 36;
         apply_preset_to(TSEL, 2);
         ok &= TSEL->p[P_VOICE] == V_POLY;
-        bad += check("  PIANO and FLUTE stay POLY with the default sends", ok);
+        bad += check("  PIANO stays POLY with the default sends", ok);
         set_engine_of(TSEL, ENGI_SLICE);
         for (k = 0; k < 2u; k++) {
             apply_preset_to(TSEL, k);
@@ -4115,10 +4115,10 @@ static int test_quick_layers(void)
         btn_down(B_EDIT); frame();
         c0 = eng_list_pos(&tot);
         turn(EN_K2, 1);
-        ok = TSEL->preset == 2u && user_of(TSEL) >= UP_SLOTS;
+        ok = TSEL->preset == 5u && user_of(TSEL) >= UP_SLOTS;
         c1 = eng_list_pos(&tot);
         turn(EN_K2, 1);
-        ok &= TSEL->preset == 5u;                       /* (3 is SAX's alias: the first stab) */
+        ok &= TSEL->preset == 6u;                       /* (the aliases 1 .. 4 are skipped: AWSM3, BIZ1) */
         c2 = eng_list_pos(&tot);
         ok &= c0 == 0u && c1 == 1u && c2 == 2u && tot >= SMP_NPRESETS - SMP_NALIAS;
         apply_preset(0);
@@ -4136,7 +4136,7 @@ static int test_quick_layers(void)
         }
         ok &= seen == (1u << tot) - 1u && TSEL->preset == 0u && !alias;
         btn_up(B_EDIT); frame();
-        bad += check("  #124 SAMPLE: KNOB 2 right PIANO, FLUTE, AWSM3 (No. 1 2 3), both ways round the list, never the alias", ok);
+        bad += check("  #124 SAMPLE: KNOB 2 right PIANO, AWSM3, BIZ1 (No. 1 2 3), both ways round the list, never the alias", ok);
     }
     song.playing = 0;
     lay_combo(B_EDIT, white(LY_INIT));

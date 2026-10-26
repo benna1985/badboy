@@ -10,7 +10,7 @@ The ADPCM state at the loop start is stored so loops restart exactly.
 
 Libraries:
   cc0        assets/samples-cc0/ (tools/fetch_cc0.py, Versilian Studios, CC0):
-             PIANO, FLUTE, SAX (set 1, once TRANH, and set 4, once PERC, are aliases of PIANO).
+             PIANO (sets 1 TRANH, 2 FLUTE, 3 SAX and 4 PERC are retired: aliases of PIANO).
              PIANO is the 5-zone piano of 1.0 .. 1.1.5 (1.2 .. 1.4.1 built a reduced 2-zone
              one at 11,025 Hz; 1.5 went back to the full one, the same bytes as 1.1.5)
 SAMPLE's factory presets end before set 4 (SMP_PERC_SLOT); every sample set and SET / USR
@@ -87,7 +87,7 @@ BASS_ATTACK, BASS_LOOP = 0.12, 0.38          # a looped bass: the attack kept (s
 # like 1 and 4); the other slots of the 8 are for the user (USR1-3, loaded from the web editor). TRANH was removed (66 KB of flash); its index 1 stays, an alias of PIANO
 # ("alias": the set named). PERC (the GM kit) was removed (66 KB); its index 4 stays, an alias of
 # PIANO too (PERC_SLOT; its sounds load as the DRUM engine)
-CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("FLUTE", "sus"), ("PIANO", "alias"), ("PIANO", "alias")]
+CC0_SETS = [("PIANO", "oneshot"), ("PIANO", "alias"), ("PIANO", "alias"), ("PIANO", "alias"), ("PIANO", "alias")]   # (FLUTE, 31 KB, retired for flash: index 2 stays, an alias of PIANO)
 PERC_SLOT = 4                                # core.h SMP_SET_PERC: SAMPLE's factory presets end before it
 MEASURED_TUNING = ()                         # sets whose recordings are not at A440 (was TRANH, ~+35 ct)
 

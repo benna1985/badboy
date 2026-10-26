@@ -327,10 +327,10 @@ async function editorSamplePresets() {
   const names = E.parse[C.NAMES](await rq(E.req.names(4)));
   await rq(E.req.preset(4, 0));
   const set = E.parse[C.DESC](await rq(E.req.desc(0, info.pe0)));
-  ok(eq(names.names.slice(0, 4), ["PIANO", "PIANO", "FLUTE", "PIANO"]) && eq(set.names.slice(0, 4), ["PIANO", "PIANO", "FLUTE", "PIANO"])
+  ok(eq(names.names.slice(0, 4), ["PIANO", "PIANO", "PIANO", "PIANO"]) && eq(set.names.slice(0, 4), ["PIANO", "PIANO", "PIANO", "PIANO"])
     && set.names[4] === "PIANO" && eq(set.names.slice(5, 21), ["AWSM3", "BIZ1", "BLRT2", "DJPRO", "HOUSE", "LNDL2", "M1ORG", "ORGNX", "PARTY", "PCHRD", "RED2", "SHORT", "SL2", "SYN15", "HIGHR", "WILD1"]) && eq(set.names.slice(21, 34), ["808", "808D", "BASS1", "BASS2", "REESD", "SUBA", "BASS3", "DONK", "DRED", "DREDR", "REESE", "SDROP", "SFALL"]) && eq(set.names.slice(34), ["USR1", "USR2", "USR3", "USR4", "USR5"]),
-    "SAMPLE: TRANH, PERC and SAX removed, SET 1, 3 and 4 kept as PIANO aliases, indices unchanged");
-  ok(E.aliasOf(names.names, 1) === 0 && E.aliasOf(names.names, 2) === 2 && E.aliasOf(set.names, 5) === 5 &&
+    "SAMPLE: TRANH, FLUTE, PERC and SAX removed, SET 1 .. 4 kept as PIANO aliases, indices unchanged");
+  ok(E.aliasOf(names.names, 1) === 0 && E.aliasOf(names.names, 2) === 0 && E.aliasOf(set.names, 5) === 5 &&
      E.aliasOf(set.names, 4) === 0, "SAMPLE: an entry named like an earlier one is an alias of it");
   const alias = E.parse[C.PRESET](await rq(E.req.preset(4, 1)));
   const setAlias = E.parse[C.SET](await rq(E.req.set(0, info.pe0, 1)));
