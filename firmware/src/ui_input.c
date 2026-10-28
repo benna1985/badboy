@@ -587,9 +587,10 @@ static void launch_do(uint32_t idx)
     }
     for (k = a; k < b; k++) {
         fm1_irq_off();
-        if (ui.l_now && song.playing)
+        if (ui.l_now && song.playing) {
             pbank_switch(&trk[k], idx);
-        else
+            pbank_retrig(&trk[k]);
+        } else
             (void)pbank_launch(&trk[k], idx);
         fm1_irq_on();
     }

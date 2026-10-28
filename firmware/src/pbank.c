@@ -139,6 +139,19 @@ static void pbank_switch(track_t *t, uint32_t idx)
     pbank_load(t, idx);
 }
 
+/* NOW (LAUNCH WHEN): the key restarts the track's pattern from its step 0, the pattern changed or not (the next block
+ * fires step 0 as PLAY does) */
+static void pbank_retrig(track_t *t)
+{
+    t->pat_q = 0;
+    t->seq_idx = (uint16_t)(t->p[P_SLEN] - 1);
+    t->seq_pos = 0x7FFFFFFF;
+    t->rskip_n = 0;
+    t->rh_n = 0;
+    t->rat_left = 0;
+    t->nd_late = t->nd_early = ND_NONE;
+    t->nd_fired = 0;
+}
 /* launch: at the next bar while playing (a second press changes what is queued), at once stopped. 0: refused (a SONG) */
 static int pbank_launch(track_t *t, uint32_t idx)
 {

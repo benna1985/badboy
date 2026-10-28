@@ -137,6 +137,15 @@ int main(void)
     bad += check("LAUNCH: a white key launches its pattern (stopped: at once)", ok);
     ok = (launch_leds() & (1u << key_at(0, 2))) && !(launch_leds() & (1u << key_at(0, 0)));
     bad += check("  its LED shows the pattern playing", ok);
+    {   /* WHEN = NOW, playing: the key restarts the pattern from step 0, the same pattern too */
+        ui.l_scope = 1; ui.l_now = 1;
+        song.playing = 1;
+        t->seq_idx = 9; t->seq_pos = 1234;
+        tap_key(key_at(0, 2));
+        ok = t->pat == 2 && t->seq_idx == (uint16_t)(t->p[P_SLEN] - 1) && t->seq_pos == 0x7FFFFFFF;
+        song.playing = 0; ui.l_now = 0; ui.l_scope = 0;
+        bad += check("LAUNCH NOW: the key retriggers the playing pattern from its first step", ok);
+    }
     tap_key(key_at(0, 0));
     t->step[2].n = 1; t->step[2].note[0] = 66; t->step[2].time = ST_NOTE;       /* pattern 1 gets a note */
     memset(pbank_idx, 0, sizeof pbank_idx);
