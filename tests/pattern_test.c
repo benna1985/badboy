@@ -224,31 +224,60 @@ int main(void)
         bad += check("  while playing: MODE stays; rows can be edited and the position stays valid", ok);
     }
 
-    /* SAVE > PATTERNS: SLOT, LOAD / STORE, READ / WRITE */
+    /* SAVE > PATTERNS: SLOT, SCOPE, LOAD / STORE, READ / WRITE */
     go_page(GR_PBANK); frame();
     memset(pbank_idx, 0, sizeof pbank_idx);
     pbank_launch(t, 0);
     t->step[7].n = 1; t->step[7].note[0] = 70; t->step[7].time = ST_NOTE;
     ui.l_dest = 0;
+    ui.l_scope = 0;
     turn(EN_K1, 4);
     ok = ui.l_dest == 4u;
-    turn(EN_K2, 1);
-    ok &= pbank_get(0, 4) && pbank_get(0, 4)->step[7].note[0] == 70;
-    bad += check("PATTERNS: KNOB 1 the slot, KNOB 2 right stores the playing pattern in it", ok);
-    turn(EN_K2, -1);
+    turn(EN_K3, 1);                                  /* SCOPE ALL: every track goes into slot 5 */
+    {
+        uint32_t k;
+        for (k = 0; k < NTRK; k++)
+            ok &= pbank_get(k, 4) != NULL;
+        ok &= pbank_get(0, 4)->step[7].note[0] == 70;
+    }
+    bad += check("PATTERNS: KNOB 1 the slot, KNOB 3 right stores every track's playing pattern in it (SCOPE ALL)", ok);
+    turn(EN_K3, -1);
     ok = t->pat == 4 && t->step[7].note[0] == 70;
-    bad += check("  KNOB 2 left loads it", ok);
+    {
+        uint32_t k;
+        for (k = 0; k < NTRK; k++)
+            ok &= trk[k].pat == 4u;
+    }
+    bad += check("  KNOB 3 left loads the slot into every track", ok);
+    /* one track only */
+    turn(EN_K2, 2);
+    ok = ui.l_scope == 2u;
+    ui.l_dest = 6;
+    trk[1].step[3].n = 1; trk[1].step[3].note[0] = 61; trk[1].step[3].time = ST_NOTE;
     turn(EN_K3, 1);
+    ok &= pbank_get(1, 6) && pbank_get(1, 6)->step[3].note[0] == 61 && !pbank_get(0, 6) && !pbank_get(2, 6);
+    bad += check("  SCOPE T2: STORE touches only track 2", ok);
+    turn(EN_K3, -1);
+    ok = trk[1].pat == 6u && trk[0].pat == 4u && trk[2].pat == 4u;
+    bad += check("  SCOPE T2: LOAD moves only track 2", ok);
+    ui.l_scope = 0;
+    turn(EN_K2, 10);
+    ok = ui.l_scope == NTRK;
+    turn(EN_K2, -10);
+    ok &= ui.l_scope == 0u;
+    ui.l_scope = 0;
+    bad += check("  KNOB 2 scrolls ALL, T1..T4", ok);
+    turn(EN_K4, 1);
     ok = pbf_req == 1u;
     pbf_req = 0;
-    turn(EN_K3, -1);
+    turn(EN_K4, -1);
     ok &= pbf_req == 2u;
     pbf_req = 0;
     seq_start();
     turn(EN_K3, 1);
     ok &= pbf_req == 0;
     seq_stop();
-    bad += check("  KNOB 3 right asks for a WRITE, left a READ (not while playing)", ok);
+    bad += check("  KNOB 4 right asks for a WRITE, left a READ (not while playing)", ok);
     printf("%s\n", bad ? "PATTERN TEST FAILED" : "pattern tests passed");
     return bad != 0;
 }

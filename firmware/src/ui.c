@@ -188,7 +188,7 @@ static struct {
     uint8_t ppick;               /* SAVE > PHRASES: the pattern picked (pat_count list index) */
     uint8_t song_row;            /* SONG: the section selected, count selects + ADD */
     uint8_t song_trk;            /* SONG: the lane (track) selected, 0..NTRK-1 */
-    uint8_t o_row, l_all, l_dest, l_now;   /* GLO > LAUNCH: launch every track (else the selected), the slot COPY / CLEAR act on, NOW (else at the bar) */
+    uint8_t o_row, l_scope, l_dest, l_now;   /* LAUNCH / SAVE > PATTERNS: SCOPE 0 ALL tracks, 1..4 one track; the slot COPY / CLEAR act on, NOW (else at the bar) */
     uint16_t ev_row;             /* SEQ > AUTOMATION (ui_events.c ev_*): the row selected (0 PLAY / CLEAR, 1 QUANTIZE, the
                                   * last + ADD; 1.2: up to EV_ROWS, past 255) */
     uint8_t ev_step, ev_id;      /* .. + ADD: the step and the parameter (or EV_CHANCE, EV_RATCH, EV_NUDGE, EV_VEL) it

@@ -1203,8 +1203,12 @@ static uint32_t graph_signature(void)
             h = (h ^ chord_last[song.sel].note[i]) * 16777619u;
         h ^= (uint32_t)t->engine * 389u;             /* (MONO and kits follow the sounding engine) */
     }
+    if (pg->graph == GR_LAUNCH || pg->graph == GR_PBANK) {
+        t = ui.l_scope ? &trk[ui.l_scope - 1u] : t;      /* (the cells show the scoped track) */
+        h ^= ui.l_scope * 2749u;
+    }
     if (pg->graph == GR_LAUNCH) {
-        h ^= (uint32_t)t->pat * 40503u + (uint32_t)t->pat_q * 7919u + ui.l_all * 3571u + ui.l_now * 1299709u + ui.l_dest * 104729u;
+        h ^= (uint32_t)t->pat * 40503u + (uint32_t)t->pat_q * 7919u + ui.l_scope * 3571u + ui.l_now * 1299709u + ui.l_dest * 104729u;
         for (i = 0; i < NPAT; i++)
             h ^= pbank_used(trk_index(t), i) << i;
     }
@@ -1578,8 +1582,8 @@ static void graph_events(void)
  * the one queued for the next bar outlined in the theme, the stored ones raised, the empty ones dim */
 static void graph_launch(void)
 {
-    const track_t *t = TSEL;
-    uint32_t i, k = trk_index(t);
+    uint32_t i, k = ui.l_scope ? ui.l_scope - 1u : song.sel % NTRK;
+    const track_t *t = &trk[k];
     int pg_pbank = cur_page()->graph == GR_PBANK;     /* (SAVE > PATTERNS: the slot the knobs act on outlined) */
     char b[12] = "T", u[8];
     for (i = 0; i < NPAT; i++) {

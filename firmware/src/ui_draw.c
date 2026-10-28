@@ -974,9 +974,9 @@ static void draw_columns(void)
         return;
     }
     if (cur_page()->graph == GR_LAUNCH) {           /* SCOPE, DEST, COPY / CLEAR, WHEN (ui_input.c launch_knob) */
-        char tn[4] = {'T', (char)('1' + song.sel % NTRK), 0, 0};
+        char tn[4] = {'T', (char)('0' + ui.l_scope), 0, 0};
         fmt_int(val, (int32_t)ui.l_dest + 1);
-        draw_column(0, "SCOPE", ui.l_all ? "ALL" : tn, "", VAL(0u), -1, trk_icon(song.sel, 1));
+        draw_column(0, "SCOPE", ui.l_scope ? tn : "ALL", "", VAL(0u), -1, trk_icon(ui.l_scope ? ui.l_scope - 1u : song.sel, 1));
         draw_column(1, "DEST", val, "", VAL(1u), -1, ICON_AUTO);
         draw_column(2, "DO", "CP/CL", "", song.playing ? T_DIM : VAL(2u), -1, ICON_AUTO);
         draw_column(3, "WHEN", ui.l_now ? "NOW" : "BAR", "", VAL(3u), -1, ICON_AUTO);
@@ -984,9 +984,11 @@ static void draw_columns(void)
     }
     if (cur_page()->graph == GR_PBANK) {            /* SLOT, LOAD / STORE, READ / WRITE (ui_input.c pbank_knob) */
         fmt_int(val, (int32_t)ui.l_dest + 1);
+        char tn[4] = {'T', (char)('0' + ui.l_scope), 0, 0};
         draw_column(0, "SLOT", val, "", VAL(0u), -1, ICON_AUTO);
-        draw_column(1, "PAT", "LD/ST", "", VAL(1u), -1, ICON_AUTO);
-        draw_column(2, "FLASH", "RD/WR", "", song.playing ? T_DIM : VAL(2u), -1, ICON_AUTO);
+        draw_column(1, "SCOPE", ui.l_scope ? tn : "ALL", "", VAL(1u), -1, trk_icon(ui.l_scope ? ui.l_scope - 1u : song.sel, 1));
+        draw_column(2, "PAT", "LD/ST", "", VAL(2u), -1, ICON_AUTO);
+        draw_column(3, "FLASH", "RD/WR", "", song.playing ? T_DIM : VAL(3u), -1, ICON_AUTO);
         return;
     }
     if (cur_page()->graph == GR_ORDER) {            /* ROW, PAT, BARS, MODE (ui_input.c order_knob) */

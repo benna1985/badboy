@@ -566,9 +566,20 @@ static void song_keys(uint32_t notes)
 }
 /* LAUNCH (ui.c launch_on): pattern idx of the selected track, or of every track with SCOPE ALL, from the next bar (playing)
  * or now (NOW; stopped: always). The irq is off while the bank moves: the ISR plays from the same arrays */
+static void scope_range(uint32_t *a, uint32_t *b)
+{
+    *a = ui.l_scope ? ui.l_scope - 1u : 0u;
+    *b = ui.l_scope ? ui.l_scope : NTRK;
+}
+/* the track the pattern cells / LEDs show: the scoped one, with ALL the selected */
+static uint32_t scope_trk(void)
+{
+    return ui.l_scope ? ui.l_scope - 1u : song.sel % NTRK;
+}
 static void launch_do(uint32_t idx)
 {
-    uint32_t k, a = ui.l_all ? 0u : song.sel, b = ui.l_all ? NTRK : song.sel + 1u;
+    uint32_t k, a, b;
+    scope_range(&a, &b);
     char m[16] = "PAT ";
     if (chain_busy()) {
         ui_message("SONG PLAYING");
@@ -582,12 +593,12 @@ static void launch_do(uint32_t idx)
             (void)pbank_launch(&trk[k], idx);
         fm1_irq_on();
     }
-    if (!trk[song.sel].pat_q && trk[song.sel].pat != idx % NPAT) {     /* the live pattern had no entry to go to */
+    if (!trk[a].pat_q && trk[a].pat != idx % NPAT) {     /* the live pattern had no entry to go to */
         ui_message("BANK FULL");
         return;
     }
     fmt_int(m + 4, (int32_t)idx + 1);
-    if (song.playing && !ui.l_now && trk[song.sel].pat_q)
+    if (song.playing && !ui.l_now && trk[a].pat_q)
         str_cpy(m + str_len(m), " NEXT BAR", 10);
     ui_message(m);
     ui.force = 1;
@@ -603,20 +614,26 @@ static void launch_keys(uint32_t notes)
 static uint32_t launch_leds(void)
 {
     uint32_t k, m = 0;
-    const track_t *t = TSEL;
+    const track_t *t = &trk[scope_trk()];
     for (k = 0; k < 27u; k++)
         if (!key_black(k) && (key_place(k) == t->pat || (t->pat_q && key_place(k) + 1u == t->pat_q)))
             m |= 1u << k;
     return m;
 }
-/* LAUNCH's knobs: 1 SCOPE (T / ALL), 2 DEST, 3 right COPY the selected track's pattern playing to DEST, left CLEAR DEST,
- * 4 WHEN (BAR / NOW) */
+/* SCOPE knob: ALL, T1..T4 (turn through them) */
+static void scope_turn(int32_t steps)
+{
+    ui.l_scope = (uint8_t)clamp((int32_t)ui.l_scope + steps, 0, (int32_t)NTRK);
+}
+/* LAUNCH's knobs: 1 SCOPE (ALL / T1..T4), 2 DEST, 3 right COPY each scoped track's pattern playing to DEST, left CLEAR
+ * DEST, 4 WHEN (BAR / NOW) */
 static void launch_knob(uint32_t slot, int32_t steps)
 {
-    track_t *t = TSEL;
+    uint32_t k, a, b;
     char m[20];
+    scope_range(&a, &b);
     if (slot == 0u) {
-        ui.l_all = steps > 0;
+        scope_turn(steps);
     } else if (slot == 1u) {
         ui.l_dest = (uint8_t)clamp((int32_t)ui.l_dest + steps, 0, NPAT - 1);
     } else if (slot == 2u) {
@@ -624,14 +641,16 @@ static void launch_knob(uint32_t slot, int32_t steps)
             ui_message(chain_busy() ? "SONG PLAYING" : "STOP TO EDIT");
             return;
         }
-        if (steps > 0 && ui.l_dest != t->pat) {
-            if (!pbank_copy(t, t->pat, ui.l_dest)) {
-                ui_message("BANK FULL");
-                return;
-            }
+        if (steps > 0) {
+            for (k = a; k < b; k++)
+                if (ui.l_dest != trk[k].pat && !pbank_copy(&trk[k], trk[k].pat, ui.l_dest)) {
+                    ui_message("BANK FULL");
+                    return;
+                }
             str_cpy(m, "COPIED TO ", 12);
         } else if (steps < 0) {
-            pbank_clear(t, ui.l_dest);
+            for (k = a; k < b; k++)
+                pbank_clear(&trk[k], ui.l_dest);
             str_cpy(m, "CLEARED ", 12);
         } else {
             return;
@@ -643,30 +662,37 @@ static void launch_knob(uint32_t slot, int32_t steps)
     }
     ui.force = 1;
 }
-/* SAVE > PATTERNS: KNOB 1 the slot, 2 right STORE the playing pattern in it / left LOAD it, 3 right WRITE the bank (and
- * the order) to flash / left READ it back (both when stopped: pbank_flash.c pbf_poll) */
+/* SAVE > PATTERNS: KNOB 1 the slot, 2 the SCOPE (ALL tracks / T1..T4), 3 right STORE the playing pattern of every track in
+ * scope in the slot / left LOAD the slot back into them, 4 right WRITE the bank (and the order) to flash / left READ it
+ * back (both when stopped: pbank_flash.c pbf_poll) */
 static void pbank_knob(uint32_t slot, int32_t steps)
 {
-    track_t *t = TSEL;
+    uint32_t k, a, b;
     char m[24];
+    scope_range(&a, &b);
     if (slot == 0u) {
         ui.l_dest = (uint8_t)clamp((int32_t)ui.l_dest + steps, 0, NPAT - 1);
     } else if (slot == 1u) {
+        scope_turn(steps);
+    } else if (slot == 2u) {
         if (chain_busy() || (steps > 0 && song.playing)) {
             ui_message(chain_busy() ? "SONG PLAYING" : "STOP TO EDIT");
             return;
         }
         if (steps > 0) {
-            if (!pbank_copy(t, t->pat, ui.l_dest)) {
-                ui_message("BANK FULL");
-                return;
-            }
+            for (k = a; k < b; k++)
+                if (!pbank_copy(&trk[k], trk[k].pat, ui.l_dest)) {
+                    ui_message("BANK FULL");
+                    return;
+                }
             str_cpy(m, "STORED IN ", 12);
         } else {
-            fm1_irq_off();
-            (void)pbank_launch(t, ui.l_dest);
-            fm1_irq_on();
-            if (!t->pat_q && t->pat != ui.l_dest) {
+            for (k = a; k < b; k++) {
+                fm1_irq_off();
+                (void)pbank_launch(&trk[k], ui.l_dest);
+                fm1_irq_on();
+            }
+            if (!trk[a].pat_q && trk[a].pat != ui.l_dest) {
                 ui_message("BANK FULL");
                 return;
             }
@@ -674,7 +700,7 @@ static void pbank_knob(uint32_t slot, int32_t steps)
         }
         fmt_int(m + str_len(m), (int32_t)ui.l_dest + 1);
         ui_message(m);
-    } else if (slot == 2u) {
+    } else if (slot == 3u) {
         if (song.playing || chain_busy()) {
             ui_message("STOP FIRST");
             return;
