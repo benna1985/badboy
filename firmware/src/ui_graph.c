@@ -1755,7 +1755,7 @@ static void track_strip(uint32_t c, uint32_t sel, uint32_t st, uint32_t mute, ui
         cv_keycap(5, 22 + AF_S_CAP_Y + HALF_UP(AF_S_CAP_H - KC_H), KC_MUTE, hot == 4u ? T_ACCENT : T_KEY, T_INK, T_SURF);
     else
         cv_free_text(5, 22, &AF_S, b, mute ? T_DIM : sel ? T_TEXT : T_MID, T_SURF, CARD_W - 10);
-    cv_rrect(5, TSS_GY, gw, 3, 1, ux.style ? T_LINE : T_BG, T_SURF);
+    cv_rrect(5, TSS_GY, gw, 3, 1, UX_LINE ? T_LINE : T_BG, T_SURF);
     cv_rrect(5, TSS_GY, fx < 3 ? 3 : fx, 3, 1, hot == 1u ? T_ACCENT : vc, T_BG);
     cv_rrect(5, TSS_MY, gw, 3, 1, T_RAISE, T_SURF);
     if (m)
@@ -1978,11 +1978,11 @@ static void draw_home_tracks(void)
             ts.meter[c] = 0;
         for (c = 1; c < NTRK; c++) {                 /* the 2 rows between two rows; LINE: a rule on the first */
             uint32_t y = (uint32_t)(Y_GRAPH + (int32_t)c * TR_PITCH - 2);
-            if (ux.style) {
+            if (UX_LINE) {
                 lcd_fill(3, y, TR_W, 1, T_RULE);
                 GFX_HOOK_RULE(3, y, TR_W, 1);
             }
-            lcd_fill(3, ux.style ? y + 1u : y, TR_W, ux.style ? 1u : 2u, T_BG);
+            lcd_fill(3, UX_LINE ? y + 1u : y, TR_W, UX_LINE ? 1u : 2u, T_BG);
         }
     }
     for (c = 0; c < NTRK; c++)
@@ -2158,7 +2158,7 @@ static void sg_block(const song_lay_t *L, int32_t off, uint32_t k, uint32_t i, u
         F.p0 = a > x0 ? a : x0;
         F.p1 = sp + 2 < x1 ? sp + 2 : x1;              /* (its right corners under the playhead) */
         if (F.p1 > F.p0) {                             /* (no cell of its own: the letter may cross its end) */
-            int32_t e = F.p0 == bx && ux.style != ST_LINE && F.p1 - F.p0 > 2 ? 2 : 0;   /* the block's rounded end */
+            int32_t e = F.p0 == bx && ux.style != ST_LINE && ux.style != ST_RETRO && F.p1 - F.p0 > 2 ? 2 : 0;   /* the block's rounded end */
             cv_rect(F.p0 + e, y, F.p1 - F.p0 - e, SG_LH, F.pf);
             if (e) {
                 cv_rect(F.p0, y + 2, 1, SG_LH - 4, F.pf);

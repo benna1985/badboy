@@ -254,7 +254,7 @@ static void menu_tabs(void)                            /* (in screen rows: cv_oy
     int32_t a[MTAB_COUNT], x[MTAB_COUNT], w[MTAB_COUNT];
     uint32_t k;
     mt_layout(a, x, w);
-    if (ux.style)                                      /* LINE: a rule under the tabs */
+    if (UX_LINE)                                      /* LINE: a rule under the tabs */
         cv_rule(4, MP_Y - 3, 232, 1);
     for (k = 0; k < MTAB_COUNT; k++) {
         int on = k == (uint32_t)((mt.pos + MT_ONE / 2) / MT_ONE);   /* (half way, the shown look moves over) */
@@ -303,7 +303,7 @@ static void menu_row(uint32_t k, uint32_t row)
     if (sel)
         cv_rrect(MR_X, y, MR_W, h, 6, T_THEME, T_SURF);
     else if (k && row - 1u != ui.menu_sel)             /* a rule from the row above (none beside the selected one) */
-        cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
+        cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, UX_LINE ? T_RULE : T_LINE);
     GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "menu row name centred up/down");
     cv_text_on(MR_LX, vy, &AF_M, MI_NAME[row], fg, bg);
     if (row == MI_LCLEAR) {                            /* LEARN CLEAR (1.5): how many CCs are learned, "NONE" */
@@ -378,12 +378,12 @@ static void info_rows(void)                            /* (in screen rows: cv_oy
     uint32_t k;
     char cpu[8];
     fmt_int(cpu, info.cpu);
-    if (!ux.style)                                     /* FLAT: the rows' panel */
+    if (!UX_LINE)                                     /* FLAT: the rows' panel */
         cv_rrect(4, INFO_Y, 232, (int32_t)INFO_N * (h + 2) - 2 + 2 * MP_PAD, 8, T_SURF, T_BG);
     for (k = 0; k < INFO_N; k++) {
         int32_t y = INFO_Y + MP_PAD + (int32_t)k * (h + 2), vy = y + CAP_IN(M, h);
         if (k)
-            cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, ux.style ? T_RULE : T_LINE);
+            cv_rect(MR_X + 6, y - 1, MR_W - 12, 1, UX_LINE ? T_RULE : T_LINE);
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "info row name centred up/down");
         cv_text_on(MR_LX, vy, &AF_M, LBL[k], T_TEXT, T_SURF);
         GFX_HOOK_ALIGN(0, y, 0, y + h, AL_V, "info row value centred up/down");
@@ -476,7 +476,7 @@ static void draw_menu(void)
         cv_oy = -top_y;                               /* drawn in screen rows */
         if (!pass)
             menu_tabs();
-        if (!ux.style)                                /* FLAT: the rows' panel */
+        if (!UX_LINE)                                /* FLAT: the rows' panel */
             cv_rrect(4, MP_Y, 232, mr_y(n) - mr_gap() + MP_PAD - MP_Y, 8, T_SURF, T_BG);
         for (k = 0; k < n; k++)
             if (mr_y(k) + mr_h() > top_y && mr_y(k) - 1 < top_y + (int32_t)cv_h)

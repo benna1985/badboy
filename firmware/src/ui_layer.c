@@ -895,7 +895,7 @@ enum { LS_OFF, LS_SEL, LS_HELD, LS_WAIT, LS_DIM, LS_MUTE };
 #define LS_ALT 0x10u
 static uint16_t lc_alt(void)
 {
-    return ux.raise == UI_BW_GREY && ux.dim == UI_BW_GREY ? T_RAISE : ux_mix(T_SURF, T_TEXT, ux.style ? 10 : 22);
+    return ux.raise == UI_BW_GREY && ux.dim == UI_BW_GREY ? T_RAISE : ux_mix(T_SURF, T_TEXT, UX_LINE ? 10 : 22);
 }
 
 static uint16_t lc_fill(uint32_t st, uint16_t *ink)
@@ -924,7 +924,7 @@ static uint16_t lc_fill(uint32_t st, uint16_t *ink)
  * across the gap's corner, so they meet in a grid. Cells are 4 px apart from x 6, y 4. Returns the fill */
 static uint16_t lc_box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t fill)
 {
-    if (ux.style) {
+    if (UX_LINE) {
         if (fill == T_RAISE)
             fill = T_SURF;
         if (x > 7)                                       /* (not the first column: x 6) */

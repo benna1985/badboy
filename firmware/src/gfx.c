@@ -92,6 +92,8 @@ static struct {
  * Selections, accents, keys and gauges keep their fills in every style */
 #define ST_FLAT 0u
 #define ST_LINE 1u
+#define UX_LINE (ux.style == ST_LINE)   /* (the flat-on-BG look: no SURF, 1 px rules) */
+#define ST_RETRO 3u              /* RETRO (1.6): square corners and 3D bevels, an old computer's panels (2: the retired PIXEL) */
 #define T_RULE ux.dim            /* LINE: the dividers (DIM: visible on NIGHT, GREY, MONO and PAPER, quieter than labels) */
 #define T_BG ux.bg               /* background */
 #define T_SURF ux.surf           /* dialogs, menu rows, mixer strips */
@@ -152,7 +154,7 @@ static void palette_set(uint32_t i)
     const ui_pal_t *p = cust ? &ux_cust : &UI_PALETTES[i % NPALETTES];
     i %= NPALETTES;
     ux.mono = !cust && i == UI_GREY_INDEX;
-    ux.bg = p->bg; ux.surf = ux.style ? p->bg : p->surf; ux.text = p->text; ux.theme = p->theme; ux.accent = p->accent;
+    ux.bg = p->bg; ux.surf = UX_LINE ? p->bg : p->surf; ux.text = p->text; ux.theme = p->theme; ux.accent = p->accent;
     ux.mid = ux_mix(p->bg, p->text, UI_MID_PCT);
     ux.dim = ux_mix(p->bg, p->text, UI_DIM_PCT);
     ux.line = ux_mix(p->bg, p->text, UI_LINE_PCT);
@@ -300,16 +302,38 @@ static uint32_t rr_cov(int32_t r, int32_t i, int32_t j)
 }
 /* a filled rectangle with rounded corners (r <= 8), the corners anti-aliased against `under` (what lies
  * behind it): the flat look's cards, panels, rows, bars and buttons */
+/* RETRO: a surface or a selection stands out of the screen (a light edge top and left, a dark one bottom and right),
+ * a well (RAISE: chips, slots, button wells) sinks into it (the other way round). Other fills stay flat */
+static void cv_bevel(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
+{
+    uint16_t lo, hi;
+    int up = c == T_SURF || c == T_SEL || c == T_THEME || c == T_ACCENT;
+    if (!up && c != T_RAISE)
+        return;
+    hi = ux_mix(c, T_TEXT, up ? 40 : 22);
+    lo = ux_mix(c, T_BG, up ? 65 : 70);
+    if (!up) {
+        uint16_t t = hi;
+        hi = lo;
+        lo = t;
+    }
+    cv_rect(x, y, w - 1, 1, hi);                 /* top */
+    cv_rect(x, y + 1, 1, h - 2, hi);             /* left */
+    cv_rect(x + 1, y + h - 1, w - 1, 1, lo);     /* bottom */
+    cv_rect(x + w - 1, y + 1, 1, h - 2, lo);     /* right */
+}
 static void cv_rrect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint16_t c, uint16_t under)
 {
     int32_t i, j;
     GFX_HOOK_CELL(x, y + cv_oy, x + w, y + h + cv_oy);   /* (the lint: what is drawn on it stays inside it) */
-    if (r < 0) r = -r;                           /* (-r: rounded in every style: a keycap-like cushion) */
-    else if (ux.style == ST_LINE) r = 0;         /* LINE: square cursors, selections and fills (FLAT: rounded) */
+    if (r < 0) r = ux.style == ST_RETRO && -r > 2 ? 2 : -r;   /* (-r: rounded in every style: a keycap-like cushion; RETRO: a chamfer) */
+    else if (ux.style == ST_LINE || ux.style == ST_RETRO) r = 0;   /* LINE, RETRO: square cursors, selections and fills (FLAT: rounded) */
     if (r > w / 2) r = w / 2;
     if (r > h / 2) r = h / 2;
     if (r < 1) {
         cv_rect(x, y, w, h, c);
+        if (ux.style == ST_RETRO && w >= 8 && h >= 8)
+            cv_bevel(x, y, w, h, c);
         return;
     }
     cv_rect(x + r, y, w - 2 * r, h, c);

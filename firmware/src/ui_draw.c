@@ -426,7 +426,7 @@ static void lcd_rule(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 static void gap_rows(uint32_t y0, uint32_t y1)
 {
     uint32_t r = (y0 + y1) / 2u;
-    if (!ux.style) {
+    if (!UX_LINE) {
         lcd_fill(0, y0, 240, y1 - y0, T_BG);
         return;
     }
@@ -443,7 +443,7 @@ static void draw_gaps(uint32_t y, uint32_t h)
     lcd_fill(0, y, (uint32_t)CARD_X(0), h, T_BG);
     for (i = 0; i < 4u; i++) {                          /* right of each column */
         uint32_t x = (uint32_t)(CARD_X(i) + CARD_W), w = i < 3u ? (uint32_t)CARD_X(i + 1u) - x : 240u - x;
-        if (ux.style && i < 3u) {
+        if (UX_LINE && i < 3u) {
             lcd_rule(x, y, 1, h);
             lcd_fill(x + 1u, y, w - 1u, h, T_BG);
         } else {
@@ -631,7 +631,7 @@ static void draw_column_tall(uint32_t c, const char *label, const char *val, con
     }
     if (ratio >= 0) {
         int32_t gw = COL_W - 10, fx = ratio * gw / 1000;
-        cv_rrect(5, LG_GY, gw, 3, 1, ux.style ? T_LINE : T_BG, T_SURF);
+        cv_rrect(5, LG_GY, gw, 3, 1, UX_LINE ? T_LINE : T_BG, T_SURF);
         cv_rrect(5, LG_GY, fx < 3 ? 3 : fx, 3, 1, hot ? T_ACCENT : vc == T_DIM ? T_DIM : T_THEME, T_BG);
     }
     cv_blit((uint32_t)CARD_X(c), Y_LABEL);
@@ -762,7 +762,7 @@ static void draw_column(uint32_t c, const char *label, const char *val, const ch
         }
         if (!strip && ratio >= 0) {
             int32_t gw = COL_W - 10, fx = ratio * gw / 1000;
-            cv_rrect(5, 38, gw, 3, 1, ux.style ? T_LINE : T_BG, T_SURF);   /* (LINE: no card to cut it from) */
+            cv_rrect(5, 38, gw, 3, 1, UX_LINE ? T_LINE : T_BG, T_SURF);   /* (LINE: no card to cut it from) */
             cv_rrect(5, 38, fx < 3 ? 3 : fx, 3, 1, hot ? T_ACCENT : vc == T_DIM ? T_DIM : T_THEME, T_BG);
         }
     }
@@ -1485,7 +1485,7 @@ static void draw_countin(void)
         char d[2] = {(char)('4' - j), 0};
         int now = j == e % 4u, gone = j < e % 4u;
         uint16_t fill = now ? T_THEME : T_SURF;
-        if (ux.style && !now) {                       /* LINE: no SURF card, a 1 px rule round it */
+        if (UX_LINE && !now) {                       /* LINE: no SURF card, a 1 px rule round it */
             cv_rrect(x, 0, 48, CI_H, 8, T_RULE, T_BG);
             cv_rrect(x + 1, 1, 46, CI_H - 2, 7, T_BG, T_RULE);
         } else
@@ -1580,10 +1580,10 @@ static void draw_confirm(void)
     lcd_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
     ui.head_sig = ~0u;
     cv_begin(DLG_W, DLG_H, T_BG);                     /* a SURF card: warning, the question, the detail, two buttons */
-    if (ux.style)                                     /* LINE: no card, a 1 px rule round it */
+    if (UX_LINE)                                     /* LINE: no card, a 1 px rule round it */
         cv_rrect(0, 0, DLG_W, DLG_H, 8, T_RULE, T_BG);
-    cv_rrect(!!ux.style, !!ux.style, DLG_W - 2 * !!ux.style, DLG_H - 2 * !!ux.style, 8 - !!ux.style, T_SURF,
-             ux.style ? T_RULE : T_BG);
+    cv_rrect(UX_LINE, UX_LINE, DLG_W - 2 * UX_LINE, DLG_H - 2 * UX_LINE, 8 - UX_LINE, T_SURF,
+             UX_LINE ? T_RULE : T_BG);
     GFX_HOOK_ALIGN(0, 0, DLG_W, 0, AL_H, "dialog icon centred");
     cv_icon_in(0, 12, DLG_W, 0, 16, ui.confirm == CF_CLEAR_MOTION ? ICON_X_MOTION_DEL : ICON_X_WARN, T_ACCENT, T_SURF);
     if (text_w(tf, a) > DLG_W - 16)
@@ -1612,7 +1612,7 @@ static void draw_confirm(void)
 /* the stored STYLE (ui_style: the menu, a settings import, a restore) into gfx.c's copy: the tokens again, all redrawn */
 static void style_apply(void)
 {
-    if (ui_style > ST_LINE)                             /* 2, the retired PIXEL: LINE; unknown: FLAT */
+    if (ui_style > ST_LINE && ui_style != ST_RETRO)     /* 2, the retired PIXEL: LINE; unknown: FLAT */
         ui_style = ui_style == 2u ? ST_LINE : ST_FLAT;
     if (ux.style != ui_style) {
         ux.style = ui_style;

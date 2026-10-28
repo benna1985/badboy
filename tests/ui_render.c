@@ -2308,9 +2308,9 @@ int main(int argc, char **argv)
         }
     {   /* STYLE LINE (gfx.c ST_*): every screen in every palette, linted (GREY: gray, MONO: neutral); GREY MONO NIGHT
          * PAPER as OUTDIR/ppm/<STYLE>_<PALETTE>_<screen>.ppm (ui_render.py: sheet_<STYLE>_<PALETTE>.png) */
-        static const char *const ST_N[2] = {"FLAT", "LINE"}, *const ST_PAL[] = {"GREY", "MONO", "NIGHT", "PAPER"};
+        static const char *const ST_N[4] = {"FLAT", "LINE", "LINE", "RETRO"}, *const ST_PAL[] = {"GREY", "MONO", "NIGHT", "PAPER", "C64", "AMIGA", "CGA", "GREEN"};
         uint32_t st, k, n0 = nfind, nruled = 0;
-        for (st = ST_LINE; st <= ST_LINE; st++)
+        for (st = ST_LINE; st <= ST_RETRO; st += ST_RETRO - ST_LINE)   /* LINE, RETRO */
             for (p = 0; p < NPALETTES; p++) {
                 for (k = 0; k < sizeof ST_PAL / sizeof ST_PAL[0] && strcmp(UI_PALETTES[p].name, ST_PAL[k]); k++) ;
                 for (s = 0; s < S_COUNT; s++) {
@@ -2325,7 +2325,7 @@ int main(int argc, char **argv)
                     ui_style = (uint8_t)st; style_apply();
                     draw((int)s);
                     if (ux.style != st) { fprintf(stderr, "ui_render: %s drawn in style %u\n", name, ux.style); return 1; }
-                    nruled += nrules != 0u;
+                    nruled += st == ST_LINE && nrules != 0u;
                     lint();
                     mono_check();
                     if (k < sizeof ST_PAL / sizeof ST_PAL[0]) write_ppm(out, tag, S_NAME[s]);

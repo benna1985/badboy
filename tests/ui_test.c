@@ -1619,10 +1619,13 @@ static int test_display_preferences(void)
                  settings.palette == 6 && T_BG == UI_PALETTES[6].bg && ux.light && ui.menu == 1 && !song.octave &&
                  memcmp(before, host_screen, sizeof before) && !memcmp(sounds, trk, sizeof sounds));
     turn(EN_K1, 1);
-    bad += check("COLOR KNOB 1 steps on to HI-CON, NIGHT (#50: true black), MONO (1.0.2: black and white), then wraps to GREY",
+    bad += check("COLOR KNOB 1 steps on to HI-CON, NIGHT (#50: true black), MONO (1.0.2: black and white), C64 AMIGA CGA (1.6), then wraps to GREY",
                  settings.palette == 7 && (turn(EN_K1, 1), settings.palette == 8u) && T_BG == 0u &&
                  str_eq(UI_PALETTES[8].name, "NIGHT") && (turn(EN_K1, 1), settings.palette == UI_BW_INDEX) &&
                  str_eq(UI_PALETTES[UI_BW_INDEX].name, "MONO") && T_BG == 0u && T_TEXT == 0xFFFFu &&
+                 (turn(EN_K1, 1), settings.palette == 10u && str_eq(UI_PALETTES[10].name, "C64")) &&
+                 (turn(EN_K1, 1), settings.palette == 11u && str_eq(UI_PALETTES[11].name, "AMIGA")) &&
+                 (turn(EN_K1, 1), settings.palette == 12u && str_eq(UI_PALETTES[12].name, "CGA")) &&
                  (turn(EN_K1, 1), settings.palette == UI_GREY_INDEX) && str_eq(UI_PALETTES[UI_GREY_INDEX].name, "GREY"));
     settings.lowcut = 2;
     ui.menu_sel = MI_LOWCUT;
@@ -8481,17 +8484,21 @@ static int test_style(void)
     hold(B_HOME); ui.menu_sel = MI_STYLE;
     ok &= ui.menu == 1u && str_eq(MI_NAME[MI_STYLE], "STYLE");
     turn(EN_K1, 1); ok &= ui_style == ST_LINE && ux.style == ST_LINE && ux.surf == ux.bg;
-    turn(EN_K1, 1); ok &= ui_style == ST_LINE;
+    turn(EN_K1, 1); ok &= ui_style == ST_RETRO && ux.style == ST_RETRO && ux.surf != ux.bg;   /* RETRO keeps its SURF cards */
+    turn(EN_K1, 1); ok &= ui_style == ST_RETRO;
+    turn(EN_K1, -1); ok &= ui_style == ST_LINE;
     turn(EN_K1, -1); ok &= ui_style == ST_FLAT;
     turn(EN_K1, -1); ok &= ui_style == ST_FLAT;
     press(B_OCTUP); ok &= ui_style == ST_LINE && ui.menu == 1u;
-    press(B_OCTUP); ok &= ui_style == ST_LINE;
+    press(B_OCTUP); ok &= ui_style == ST_RETRO;
+    press(B_OCTUP); ok &= ui_style == ST_RETRO;
+    press(B_OCTDN); ok &= ui_style == ST_LINE;
     press(B_OCTDN); ok &= ui_style == ST_FLAT && ux.style == ST_FLAT && ux.surf != ux.bg && ui.menu == 1u;
     press(B_OCTUP); ok &= ui_style == ST_LINE;
     ok &= !(ui_prefs & 0xFFu) && settings_leds == LEDS_DIM;   /* (no other setting moved) */
     hold(B_HOME);
     ok &= !ui.menu && ux.style == ST_LINE && host_screen[rule] == swap16(T_RULE);
-    bad += check("MENU > STYLE: FLAT by default, KNOB 1 / OCT-+ FLAT / LINE, LINE drawn (rules, no SURF)", ok);
+    bad += check("MENU > STYLE: FLAT by default, KNOB 1 / OCT-+ FLAT / LINE / RETRO, LINE drawn (rules, no SURF)", ok);
     {
         persist_t p, q;
         settings_export(&p);
@@ -8511,6 +8518,12 @@ static int test_style(void)
         ok &= ux.style == ST_LINE;
         ui_style = 2; frame();                          /* (a live PIXEL byte, a restore: LINE) */
         ok &= ui_style == ST_LINE && ux.style == ST_LINE;
+        p.favorites.factory[15][29] = ST_RETRO;         /* RETRO is kept, and so again */
+        ok &= settings_import(&p, (int)sizeof p) == 1 && ui_style == ST_RETRO && p.favorites.factory[15][29] == ST_RETRO;
+        q = p;
+        ok &= settings_import(&q, (int)sizeof q) == 1 && ui_style == ST_RETRO && !memcmp(&p, &q, sizeof p);
+        frame();
+        ok &= ux.style == ST_RETRO && ux.surf != ux.bg;
         ui_style = ST_LINE;
         settings_export(&p);
         memset(&p.favorites, 0, sizeof p.favorites);
