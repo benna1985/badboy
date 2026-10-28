@@ -22,6 +22,8 @@ static void lcd_wake_now(void) {}
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *p)
 { (void)x; (void)y; (void)w; (void)h; (void)p; }
 #define FELUCCA_FLASH 1
+static uint8_t nor[0x100000];
+#define PBF_XIP() ((const uint8_t *)nor + 0xD2000u)   /* (a song's pattern bank, pbank_flash.c) */
 #include "../firmware/src/gfx.c"
 #include "../firmware/src/panel.c"
 #include "../firmware/src/ui.c"
@@ -610,7 +612,8 @@ int main(void)
         before = erases;
         proj_cur = 0;
         pat_from[0] = 1; pat_from[1] = 2;
-        ok2 = project_erase(0) == 0 && !strcmp(ui.msg, "PROJECT A ERASED") && !project_used(0) && erases == before + 1u &&
+        ok2 = project_erase(0) == 0 && !strcmp(ui.msg, "PROJECT A ERASED") && !project_used(0) && erases == before + 2u &&   /* (the project, its pattern bank) */
+              ((const uint32_t *)(nor + 0xD2000u))[0] != PBF_MAGIC &&
               st_load(OBJ_PROJECT0, &got, sizeof got) == 0 && proj_cur == PROJ_NO_SLOT && !pat_from[0] && pat_from[1] == 2u;
         proj_fetch(0);
         ok2 &= !project_used(0) && project_used(1);           /* (read back from flash: empty; the next slot kept) */

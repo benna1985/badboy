@@ -799,6 +799,11 @@ static project_t proj_scratch               /* decoded main-loop work, never aud
 static char proj_name[PROJ_NAME_LEN + 1u]    /* the name of the music as it is now (loaded, saved, the editor's */
     __attribute__((section(".pool")));       /* runtime restore); "" = none. A save takes it unless one is given */
 #define PROJ_NO_SLOT 0xFFu
+#if FELUCCA_FLASH
+static void pbf_song_load(uint32_t slot);      /* pbank_flash.c: a song's pattern bank goes with its project */
+static void pbf_song_save(uint32_t slot);
+static void pbf_song_erase(uint32_t slot);
+#endif
 static uint8_t proj_cur = PROJ_NO_SLOT;      /* the slot the music was loaded from or last saved to (a rename of it
                                               * renames the music too); PROJ_NO_SLOT none (the editor's restore) */
 static union {                               /* serialized main-loop work; no retained expansion */
@@ -912,6 +917,7 @@ static int project_save_as(uint32_t slot, const char *name)
         proj_cur = (uint8_t)(slot & 3u);
         pat_from_set((slot & 3u) + 1u);
         ui_message("SAVED");
+        pbf_song_save(slot);
         return 0;
     }
 #endif
@@ -1033,6 +1039,8 @@ static int project_erase(uint32_t slot)
         ui_message("ERASE ERROR");
         return 2;
     }
+    if (flash_ok)
+        pbf_song_erase(slot);
 #endif
     memset(&proj_slot[slot], 0, sizeof proj_slot[slot]);
     if (proj_cur == slot)
@@ -1141,6 +1149,9 @@ static void project_load(uint32_t slot)
     if (!project_restore_runtime(&proj_scratch)) {
         proj_cur = (uint8_t)(slot & 3u);
         pat_from_set((slot & 3u) + 1u);
+#if FELUCCA_FLASH
+        pbf_song_load(slot);
+#endif
     }
 }
 
@@ -1190,7 +1201,6 @@ static void persist_boot(void)                    /* before settings_init / pane
                 proj_fetch(i);
     }
     up_boot();                                     /* user presets */
-    (void)pbf_read();                              /* the saved pattern bank (no track is touched) */
 #endif
 }
 

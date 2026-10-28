@@ -664,8 +664,8 @@ static void launch_knob(uint32_t slot, int32_t steps)
     ui.force = 1;
 }
 /* SAVE > PATTERNS: KNOB 1 the slot, 2 the SCOPE (ALL tracks / T1..T4), 3 right STORE the playing pattern of every track in
- * scope in the slot / left LOAD the slot back into them, 4 right WRITE the bank (and the order) to flash / left READ it
- * back (both when stopped: pbank_flash.c pbf_poll) */
+ * scope in the slot / left LOAD the slot back into them, 4 right WRITE the song's bank (and the order) to flash / left
+ * READ it back (the song is the project slot loaded or saved last; both when stopped: pbank_flash.c pbf_poll) */
 static void pbank_knob(uint32_t slot, int32_t steps)
 {
     uint32_t k, a, b;
@@ -704,6 +704,10 @@ static void pbank_knob(uint32_t slot, int32_t steps)
     } else if (slot == 3u) {
         if (song.playing || chain_busy()) {
             ui_message("STOP FIRST");
+            return;
+        }
+        if (pbf_slot > 3u) {
+            ui_message("SAVE A SONG FIRST");
             return;
         }
         pbf_req = steps > 0 ? 1u : 2u;

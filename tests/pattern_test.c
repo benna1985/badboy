@@ -276,8 +276,12 @@ int main(void)
     ok &= ui.l_scope == 0u;
     ui.l_scope = 0;
     bad += check("  KNOB 2 scrolls ALL, T1..T4", ok);
+    pbf_slot = 0xFFu;
     turn(EN_K4, 1);
-    ok = pbf_req == 1u;
+    ok = pbf_req == 0u;                              /* no song saved or loaded: nowhere to write */
+    pbf_slot = 1u;
+    turn(EN_K4, 1);
+    ok &= pbf_req == 1u;
     pbf_req = 0;
     turn(EN_K4, -1);
     ok &= pbf_req == 2u;

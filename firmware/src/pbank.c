@@ -9,8 +9,8 @@
  * sound the track has. Playing, a launch waits for the next bar line (beat_n wraps to 0: the bars of PLAY, 4/4) and
  * the pattern starts from its step 1 there; stopped, it happens at once. Not while a SONG plays (its sections choose).
  *
- * A pattern is stored from RAM into flash by pbank_store.c (pbank_dirty tracks the changed banks).
- * pbank_pat_t is not a project: PROJECT slots and SONG are as before. A project load replaces the live pattern. */
+ * The bank belongs to the song: SAVE > PROJECT writes every pattern (with its sound) and the ORDER with the project, loading
+ * the project brings them back with the pattern each track was on (pbank_flash.c). pbank_dirty tracks the changed banks. */
 #define NPAT 16
 #define PAT_MOT 16                       /* automation and locks kept per pattern (the track's 128 are shared by the four) */
 #define PSLOTS 34                        /* patterns kept in RAM, shared by all tracks (the POOL is full): "BANK FULL" past it */
@@ -44,6 +44,7 @@ static pbank_pat_t *pbank_alloc(uint32_t k, uint32_t i)   /* the slot's entry, t
         }
     return 0;
 }
+static uint8_t pbf_slot = 0xFFu;           /* the song (project slot) whose bank SAVE > PATTERNS READ / WRITE use: the one loaded or saved last */
 static uint8_t pbf_req;                    /* SAVE > PATTERNS asked: 1 write the bank to flash, 2 read it (pbank_flash.c pbf_poll) */
 static uint8_t pbank_dirty;                /* bit k: track k's bank differs from flash */
 
