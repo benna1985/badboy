@@ -22,7 +22,12 @@ typedef struct {
 } aafont_t;
 typedef struct { const char *name; uint16_t bg, surf, text, theme, accent; } ui_pal_t;
 typedef struct { uint16_t off; uint8_t w; const char *label; } kc_t;
+#define AF_S AF_S_STD                   /* (the standard faces' names; AF_S, AF_M below choose by STYLE) */
+#define AF_M AF_M_STD
 #include "ui_fonts.h"                   /* AF_S 12 px / 400, AF_M 15 px / 500, AF_L 28 px / 600 */
+#undef AF_S
+#undef AF_M
+#include "ui_fonts_px.h"                /* AP_S, AP_M: the same lines in a chunky bitmap face (RETRO: Inter Tight bold, no antialiasing, whole-pixel advances) */
 #include "ui_palettes.h"
 #include "ui_keycaps.h"                 /* KC_*: the keycaps / badges (tools/gen_aa_keycaps.py), KNOB_* arcs */
 #define ELLIPSIS '\x85'                 /* the ellipsis glyph of AF_S and AF_M */
@@ -94,6 +99,8 @@ static struct {
 #define ST_LINE 1u
 #define UX_LINE (ux.style == ST_LINE)   /* (the flat-on-BG look: no SURF, 1 px rules) */
 #define ST_RETRO 3u              /* RETRO (1.6): square corners and 3D bevels, an old computer's panels (2: the retired PIXEL) */
+#define AF_S (*(ux.style == ST_RETRO ? &AP_S : &AF_S_STD))   /* the face the style draws (RETRO: chunky) */
+#define AF_M (*(ux.style == ST_RETRO ? &AP_M : &AF_M_STD))
 #define T_RULE ux.dim            /* LINE: the dividers (DIM: visible on NIGHT, GREY, MONO and PAPER, quieter than labels) */
 #define T_BG ux.bg               /* background */
 #define T_SURF ux.surf           /* dialogs, menu rows, mixer strips */
@@ -187,6 +194,8 @@ static int palette_stored_ok(uint32_t v) { return v < 20u || (v >= UI_PAL_TAG &&
 static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
 
 /* ------------------------------------------------------------ canvas --- */
+static uint8_t sl_off;                           /* the splash is drawn without scanlines */
+static uint8_t cv_slx;                           /* the canvas' odd rows are darkened already (a second blit of it) */
 static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
 {
     uint32_t i, n;
@@ -197,6 +206,7 @@ static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
     GFX_HOOK_BEGIN();
     cv_w = w;
     cv_h = h;
+    cv_slx = 0;
     cv_cy0 = 0;
     cv_cy1 = (int16_t)h;
     cv_bg = bg;
@@ -205,9 +215,46 @@ static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
         cv_px[i] = s;
 }
 
+/* RETRO's scanlines: every other screen row a quarter darker (the canvases as they are blitted, the fills of the
+ * gaps between them: scr_fill). GREY and MONO darken on their one channel, so they stay gray */
+static int ux_neutral(uint16_t c)                 /* R = B and G = 2 R (within 2): GREY, MONO and the grays of other palettes */
+{
+    int32_t d = (int32_t)((c >> 5) & 63u) - (int32_t)(c >> 11) * 2;
+    return (c >> 11) == (c & 31u) && d >= -2 && d <= 2;
+}
+static uint16_t sl_dark(uint16_t c)
+{
+    if (ux.mono || ux_neutral(c)) {
+        uint32_t x = c >> 11;
+        return ux_gray(x - (x >> 2));
+    }
+    return (uint16_t)(c - ((c >> 2) & 0x39E7u));
+}
+static void cv_scan(uint32_t y, uint32_t r0)
+{
+    uint32_t r, i;
+    if (ux.style != ST_RETRO || cv_slx || sl_off)
+        return;
+    cv_slx = 1;
+    for (r = r0; r < cv_h; r++)
+        if ((y + r) & 1u)
+            for (i = 0; i < cv_w; i++)
+                cv_px[r * cv_w + i] = swap16(sl_dark(swap16(cv_px[r * cv_w + i])));
+}
+static void scr_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
+{
+    uint32_t r;
+    if (ux.style != ST_RETRO || sl_off) {
+        lcd_fill(x, y, w, h, c);
+        return;
+    }
+    for (r = 0; r < h; r++)
+        lcd_fill(x, y + r, w, 1u, ((y + r) & 1u) ? sl_dark(c) : c);
+}
 static void cv_blit(uint32_t x, uint32_t y)
 {
     GFX_HOOK_BLIT(x, y, 0u);
+    cv_scan(y, 0u);
     lcd_blit(x, y, cv_w, cv_h, cv_px);
 }
 
@@ -215,6 +262,7 @@ static void cv_blit(uint32_t x, uint32_t y)
 static void cv_blit_from(uint32_t x, uint32_t y, uint32_t r0)
 {
     GFX_HOOK_BLIT(x, y, r0);
+    cv_scan(y, r0);
     if (r0 < cv_h)
         lcd_blit(x, y + r0, cv_w, cv_h - r0, cv_px + r0 * cv_w);
 }
@@ -302,6 +350,15 @@ static uint32_t rr_cov(int32_t r, int32_t i, int32_t j)
 }
 /* a filled rectangle with rounded corners (r <= 8), the corners anti-aliased against `under` (what lies
  * behind it): the flat look's cards, panels, rows, bars and buttons */
+/* RETRO: each track's number badge in a colour of its own (red, yellow, green, blue); the accent and the quiet MID of the
+ * badge's states take it (a MIDI-lit badge, a muted one, a selected row's ink stay as they were); GREY and MONO: none */
+static uint16_t trk_hue(uint32_t c, uint16_t dflt)
+{
+    static const uint16_t H[4] = {RGB(255, 112, 112), RGB(255, 206, 72), RGB(100, 226, 140), RGB(108, 186, 255)};
+    if (ux.style != ST_RETRO || ux.mono || ux_neutral(ux.accent) || (dflt != T_ACCENT && dflt != T_MID))
+        return dflt;
+    return dflt == T_MID ? ux_mix(H[c & 3u], T_BG, 38) : H[c & 3u];
+}
 /* RETRO: a surface or a selection stands out of the screen (a light edge top and left, a dark one bottom and right),
  * a well (RAISE: chips, slots, button wells) sinks into it (the other way round). Other fills stay flat */
 static void cv_bevel(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)

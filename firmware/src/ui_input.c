@@ -2105,7 +2105,7 @@ static void ui_input(void)
 #define SETUP_GIVE_UP(t0) (fm1_ms - (t0) > SETUP_IDLE_MS || fm1_in.notes != 0u)
 static void setup_title(void)
 {
-    lcd_fill(0, 0, 240, 240, T_BG);
+    scr_fill(0, 0, 240, 240, T_BG);
     {   /* the title with its icon (the menu row's), centred together; M from y 8 as before */
         const char *t = "HARDWARE CALIBRATION";
         int32_t x = (240 - (16 + 6 + text_w(&AF_M, t))) / 2;
@@ -2118,7 +2118,7 @@ static void setup_title(void)
         cv_blit(0, 5);
     }
     draw_text_box(0, 32, 240, &AF_S, "TEACH EACH BUTTON AND KNOB", T_MID, 1);
-    lcd_fill(16, 56, 208, 1, T_LINE);
+    scr_fill(16, 56, 208, 1, T_LINE);
     draw_text_box(0, 206, 240, &AF_S, "ANY KEY: CANCEL", T_DIM, 1);
 }
 static void setup_show(const char *what, const char *name)     /* "PRESS" / "TURN RIGHT", the control */
@@ -2178,12 +2178,12 @@ static void panel_setup(void)
         fm1_enc_take(e);
     }
     panel.magic = PANEL_MAGIC;
-    lcd_fill(0, 0, 240, 240, T_BG);
+    scr_fill(0, 0, 240, 240, T_BG);
     ui.force = 1;
     return;
 timeout:
     panel = old;
-    lcd_fill(0, 0, 240, 240, T_BG);
+    scr_fill(0, 0, 240, 240, T_BG);
     ui.force = 1;
     ui_message("SETUP CANCELLED");
 }

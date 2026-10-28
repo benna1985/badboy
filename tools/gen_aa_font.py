@@ -47,6 +47,7 @@ HUFF = [("M", "L")]
 # graph_title: # . / J W too; a value with another character is set in M): a sparse face of those glyphs, the
 # space as its range and the rest as extras
 # (ui_test.c checks that every L string is covered)
+PIX_WGHT = (620, 660)                              # RETRO faces S, M: weights of Inter Tight
 L_CHARS = " #+-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXY"
 
 
@@ -161,10 +162,10 @@ def huff_unpack(hc, data, n):
     return out
 
 
-def emit(face, tracking, gamma, kern_min):
+def emit(face, tracking, gamma, kern_min, pre="AF_", pix=0):
     name, font, px, (first, last), extras, ftrack, phases = face
     chars = [chr(c) for c in range(first, last + 1)] + [chr(c) for c in extras]
-    r = ar.raster_font(font, px, chars, tracking if ftrack is None else ftrack, gamma, True, kern_min, phases)
+    r = ar.raster_font(font, px, chars, tracking if ftrack is None else ftrack, gamma, True, kern_min, phases, pix)
     data, table, lines = bytearray(), [], []
     for ch in chars:
         adv16, ph = r["glyphs"][ch]
@@ -202,25 +203,25 @@ def emit(face, tracking, gamma, kern_min):
     lines.append(f"/* {name}: {os.path.basename(font.split('#')[0])} {px}px, h {r['h']}, baseline {r['asc']}, "
                  f"{len(chars)} glyphs x {phases} phases, {len(data)} B data"
                  + (f" (Huffman; {len(raw)} B as nibbles) */" if hc else " */"))
-    lines.append(ar.c_array(f"AF_{name}_DATA", "uint8_t", list(data), 24, "0x{:02x}"))
+    lines.append(ar.c_array(f"{pre}{name}_DATA", "uint8_t", list(data), 24, "0x{:02x}"))
     if hc:
-        lines.append(ar.c_array(f"AF_{name}_HC", "uint8_t", hc, 24))
-    lines.append(f"static const aag_t AF_{name}_G[{len(table)}] = {{")
+        lines.append(ar.c_array(f"{pre}{name}_HC", "uint8_t", hc, 24))
+    lines.append(f"static const aag_t {pre}{name}_G[{len(table)}] = {{")
     for off, adv, bx, by, bw, bh in table:
         lines.append(f"    {{{off}, {adv}, {bx}, {by}, {bw}, {bh}}},")
     lines.append("};")
     if keys:
-        lines.append(ar.c_array(f"AF_{name}_KERN", "uint16_t", keys, 12))
-        lines.append(ar.c_array(f"AF_{name}_KD", "int8_t", deltas, 24))
+        lines.append(ar.c_array(f"{pre}{name}_KERN", "uint16_t", keys, 12))
+        lines.append(ar.c_array(f"{pre}{name}_KD", "int8_t", deltas, 24))
     ex = ", ".join(str(CODE.get(c, c)) for c in extras) or "0"
-    lines.append(f"static const uint8_t AF_{name}_EX[{max(1, len(extras))}] = {{{ex}}};")
-    lines.append(f"static const aafont_t AF_{name} = {{{r['h']}, {r['asc']}, {first}, {last}, {len(extras)}, {len(keys)}, "
-                 f"AF_{name}_G, AF_{name}_DATA, {'AF_%s_KERN' % name if keys else '0'}, "
-                 f"{'AF_%s_KD' % name if keys else '0'}, AF_{name}_EX, {psh}, {'AF_%s_HC' % name if hc else '0'}}};")
+    lines.append(f"static const uint8_t {pre}{name}_EX[{max(1, len(extras))}] = {{{ex}}};")
+    lines.append(f"static const aafont_t {pre}{name} = {{{r['h']}, {r['asc']}, {first}, {last}, {len(extras)}, {len(keys)}, "
+                 f"{pre}{name}_G, {pre}{name}_DATA, {pre + '%s_KERN' % name if keys else '0'}, "
+                 f"{pre + '%s_KD' % name if keys else '0'}, {pre}{name}_EX, {psh}, {pre + '%s_HC' % name if hc else '0'}}};")
     if "H" in chars:                                  # the capitals' band (gfx.c CAP_IN: centring text by it)
         cap = table[chars.index("H") * phases]
-        lines.append(f"#define AF_{name}_CAP_Y {cap[3]}   /* the ink of H: rows {cap[3]} .. {cap[3] + cap[5] - 1} of the line */")
-        lines.append(f"#define AF_{name}_CAP_H {cap[5]}")
+        lines.append(f"#define {pre}{name}_CAP_Y {cap[3]}   /* the ink of H: rows {cap[3]} .. {cap[3] + cap[5] - 1} of the line */")
+        lines.append(f"#define {pre}{name}_CAP_H {cap[5]}")
     cost = {"data": len(data) + len(hc), "glyph_table": 8 * len(table), "kern": 3 * len(keys), "extras": len(extras),
             "glyphs": len(chars), "phases": phases, "pairs": len(keys), "h": r["h"], "asc": r["asc"], "px": px,
             "font": os.path.basename(font.split("#")[0]), "adv_digit": r["glyphs"]["0"][0] / 16}
@@ -236,10 +237,16 @@ def main():
     ap.add_argument("--tracking", type=float, default=0.0, help="extra advance per glyph in em")
     ap.add_argument("--gamma", type=float, default=1.0, help="coverage curve; <1 thickens light-on-dark text")
     ap.add_argument("--kern-min", type=int, default=1, help="smallest kerning pair kept, in 1/16 px (0 pairs = no kerning)")
+    ap.add_argument("--pixel", type=int, default=0, metavar="THR",
+                    help="the RETRO faces (AP_S, AP_M): Inter Tight bold, no antialiasing (ink at coverage THR / 15), whole-pixel advances")
     ap.add_argument("--huff", default=",".join(HUFF[0]), help="faces stored Huffman-coded (comma list, '' = none)")
     a = ap.parse_args()
     HUFF[0] = tuple(x for x in a.huff.split(",") if x)
     faces = ([parse_face(s) for s in a.face] if a.face else []) or (preset(a.preset) if a.preset else None)
+    if a.pixel:                                        # chunky: heavier weights, one phase, no kerning, no L
+        v = str(FONTS.parent / "assets" / "fonts" / "InterTight[wght].ttf")
+        faces = [("S", v + "@" + str(PIX_WGHT[0]), 12, (32, 126), EXTRAS, -0.07, 1),
+                 ("M", v + "@" + str(PIX_WGHT[1]), 15, (32, 126), EXTRAS, -0.06, 1)]
     if not faces:
         ap.error("--preset or --face is required")
     out = ["/* generated by tools/gen_aa_font.py: 4-bit alpha glyphs (Inter Tight, SIL OFL 1.1, "
@@ -247,7 +254,7 @@ def main():
            "#pragma once", "#include <stdint.h>", ""]
     total = 0
     for f in faces:
-        text, c = emit(f, a.tracking, a.gamma, a.kern_min)
+        text, c = emit(f, a.tracking, a.gamma, a.kern_min, "AP_" if a.pixel else "AF_", a.pixel)
         out.append(text)
         total += c["total"]
         print(f"face {f[0]}: {c['font']} {c['px']}px h{c['h']} base{c['asc']}  {c['glyphs']} glyphs x {c['phases']}  "

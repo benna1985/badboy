@@ -1741,7 +1741,7 @@ static void track_strip(uint32_t c, uint32_t sel, uint32_t st, uint32_t mute, ui
     uint16_t vc = mute ? T_DIM : T_THEME;
     cv_begin(CARD_W, LG_H_GRAPH, T_BG);
     cv_rrect(0, 0, CARD_W, LG_H_GRAPH, 5, T_SURF, T_BG);
-    cv_icon_on(4, 4, 16, trk_icon(c, sel), lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID, T_SURF);
+    cv_icon_on(4, 4, 16, trk_icon(c, sel), trk_hue(c, lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID), T_SURF);
     if (st)
         GFX_HOOK_ALIGN(0, 4, 0, 20, AL_V, "mixer badge on the cushion's line");
     if (st == 1u || st == 2u)
@@ -1798,7 +1798,7 @@ static void draw_tracks(void)
         }
         cv_begin(CARD_W, H_GRAPH, T_BG);
         cv_rrect(0, 0, CARD_W, H_GRAPH, 5, T_SURF, T_BG);
-        cv_icon_on(4, 5, 16, trk_icon(c, sel), lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID, T_SURF);
+        cv_icon_on(4, 5, 16, trk_icon(c, sel), trk_hue(c, lit ? (sel ? T_TEXT : T_ACCENT) : sel ? T_ACCENT : T_MID), T_SURF);
         if (st)
             GFX_HOOK_ALIGN(0, 5, 0, 21, AL_V, "mixer badge on the cushion's line");
         if (st == 1u || st == 2u)                    /* REC (recording) / ARM (armed, stopped) */
@@ -1916,7 +1916,7 @@ static void home_track_row(uint32_t c)
     ts.meter[c] = (uint8_t)m;
     cv_begin(TR_W, TR_H, T_BG);
     cv_rrect(0, 0, TR_W, TR_H, 5, bg, T_BG);
-    cv_icon_mid(4, TR_H / 2, 16, trk_icon(c, 1), lit ? (sel ? half : T_ACCENT) : sel ? T_INK : mute ? T_DIM : T_MID, bg);
+    cv_icon_mid(4, TR_H / 2, 16, trk_icon(c, 1), trk_hue(c, lit ? (sel ? half : T_ACCENT) : sel ? T_INK : mute ? T_DIM : T_MID), bg);
     if (mute) {                                      /* MUTE: its badge at the name line's end */
         xr -= kc_w(KC_MUTE);
         GFX_HOOK_ALIGN(0, TR_NY(large), 0, TR_NY(large) + ch, AL_V, "tracks row badge on the name's line");
@@ -1972,17 +1972,17 @@ static void draw_home_tracks(void)
 {
     uint32_t c;
     if (ui.force) {                                  /* the BG round the rows only, they cover the rest (#181) */
-        lcd_fill(0, Y_GRAPH, 3, H_GRAPH, T_BG);
-        lcd_fill(3 + TR_W, Y_GRAPH, 240 - 3 - TR_W, H_GRAPH, T_BG);
+        scr_fill(0, Y_GRAPH, 3, H_GRAPH, T_BG);
+        scr_fill(3 + TR_W, Y_GRAPH, 240 - 3 - TR_W, H_GRAPH, T_BG);
         for (c = 0; c < NTRK; c++)
             ts.meter[c] = 0;
         for (c = 1; c < NTRK; c++) {                 /* the 2 rows between two rows; LINE: a rule on the first */
             uint32_t y = (uint32_t)(Y_GRAPH + (int32_t)c * TR_PITCH - 2);
             if (UX_LINE) {
-                lcd_fill(3, y, TR_W, 1, T_RULE);
+                scr_fill(3, y, TR_W, 1, T_RULE);
                 GFX_HOOK_RULE(3, y, TR_W, 1);
             }
-            lcd_fill(3, UX_LINE ? y + 1u : y, TR_W, UX_LINE ? 1u : 2u, T_BG);
+            scr_fill(3, UX_LINE ? y + 1u : y, TR_W, UX_LINE ? 1u : 2u, T_BG);
         }
     }
     for (c = 0; c < NTRK; c++)

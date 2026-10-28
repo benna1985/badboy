@@ -370,7 +370,7 @@ static void draw_head(void)
     ui.head_sig = sig;
     metro_x = -1;
     cv_begin(240, H_HEAD, T_BG);
-    cv_icon_mid(HEAD_TRK_X, H_HEAD / 2, 16, trk_icon(song.sel, 1), midi_lit(song.sel) ? T_TEXT : T_ACCENT, T_BG);   /* (1.5.5:
+    cv_icon_mid(HEAD_TRK_X, H_HEAD / 2, 16, trk_icon(song.sel, 1), midi_lit(song.sel) ? T_TEXT : trk_hue(song.sel, T_ACCENT), T_BG);   /* (1.5.5:
                                                        * a MIDI IN note into it, #208: lit) */
     if (slot && (centre || !msg)) {                    /* the slot letter (not under a message centred: its room) */
         char l[2] = {sl[0], 0};
@@ -418,7 +418,7 @@ static void draw_head(void)
 #define RULE_W (CARD_X(3) + CARD_W - CARD_X(0))
 static void lcd_rule(uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
-    lcd_fill(x, y, w, h, T_RULE);
+    scr_fill(x, y, w, h, T_RULE);
     GFX_HOOK_RULE(x, y, w, h);
 }
 /* The gaps are filled around the rules, never over them (#181: a rule filled BG, then drawn again, flashed on every
@@ -427,27 +427,27 @@ static void gap_rows(uint32_t y0, uint32_t y1)
 {
     uint32_t r = (y0 + y1) / 2u;
     if (!UX_LINE) {
-        lcd_fill(0, y0, 240, y1 - y0, T_BG);
+        scr_fill(0, y0, 240, y1 - y0, T_BG);
         return;
     }
-    lcd_fill(0, y0, 240, r - y0, T_BG);
-    lcd_fill(0, r, RULE_X0, 1, T_BG);
+    scr_fill(0, y0, 240, r - y0, T_BG);
+    scr_fill(0, r, RULE_X0, 1, T_BG);
     lcd_rule(RULE_X0, r, RULE_W, 1);
-    lcd_fill(RULE_X0 + RULE_W, r, 240u - RULE_X0 - RULE_W, 1, T_BG);
-    lcd_fill(0, r + 1u, 240, y1 - r - 1u, T_BG);
+    scr_fill(RULE_X0 + RULE_W, r, 240u - RULE_X0 - RULE_W, 1, T_BG);
+    scr_fill(0, r + 1u, 240, y1 - r - 1u, T_BG);
 }
 /* the BG beside the four columns (the cards; MIXER's strips) over rows y .. y + h - 1; LINE: the dividers */
 static void draw_gaps(uint32_t y, uint32_t h)
 {
     uint32_t i;
-    lcd_fill(0, y, (uint32_t)CARD_X(0), h, T_BG);
+    scr_fill(0, y, (uint32_t)CARD_X(0), h, T_BG);
     for (i = 0; i < 4u; i++) {                          /* right of each column */
         uint32_t x = (uint32_t)(CARD_X(i) + CARD_W), w = i < 3u ? (uint32_t)CARD_X(i + 1u) - x : 240u - x;
         if (UX_LINE && i < 3u) {
             lcd_rule(x, y, 1, h);
-            lcd_fill(x + 1u, y, w - 1u, h, T_BG);
+            scr_fill(x + 1u, y, w - 1u, h, T_BG);
         } else {
-            lcd_fill(x, y, w, h, T_BG);
+            scr_fill(x, y, w, h, T_BG);
         }
     }
 }
@@ -1423,12 +1423,14 @@ static void draw_splash(void)
 {
     int32_t h = SPL_PAD - AF_M_CAP_Y + SPL_PITCH + AF_M.h;     /* a band: its two lines, the descenders in */
     int32_t lb = h - SPL_PAD - AF_M_CAP_H - AF_M_CAP_Y;         /* the bottom band's last line: its top */
+    sl_off = 1;                                          /* (the splash: no scanlines) */
     lcd_fill(0, 0, 240, 240, T_BG);
     lcd_fill(SPL_X0, SPL_X0, SPL_SQ, SPL_SQ, T_RAISE);
     splash_band(SPL_X0, (uint32_t)h, SPL_PAD - AF_M_CAP_Y, SPLASH_LINES, AL_V, SPL_PAD,
                 SPL_PAD + SPL_PITCH + AF_M_CAP_H, "splash name + version SPL_PAD from the top");
     splash_band(SPL_X0 + SPL_SQ - (uint32_t)h, (uint32_t)h, lb - SPL_PITCH, SPLASH_LINES + 2, AL_B, 0, h - SPL_PAD,
                 "splash maker's baseline SPL_PAD from the bottom");
+    sl_off = 0;
     lcd_sync();
 }
 
@@ -1440,7 +1442,7 @@ static void draw_uboot(void)
     if (!ui.force && shown == ui.uboot)
         return;
     shown = ui.uboot;
-    lcd_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
+    scr_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
     ui.head_sig = ~0u;
     draw_text_box(0, 76, 240, &AF_M, "UPDATE MODE IN", T_TEXT, 1);
     draw_text_box(0, 102, 240, &AF_L, d, T_THEME, 1);
@@ -1469,7 +1471,7 @@ static void draw_countin(void)
     if (!ui.force && shown == sig)
         return;
     shown = sig;
-    lcd_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
+    scr_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
     ui.head_sig = ~0u;
     draw_text_box(0, 44, 240, &AF_M, "COUNT-IN", T_TEXT, 1);
     if (total > 4u) {
@@ -1577,7 +1579,7 @@ static void draw_confirm(void)
     char a[24], b[24];
     const aafont_t *tf = &AF_M;
     confirm_text(a, b);
-    lcd_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
+    scr_fill(0, H_HEAD, 240, 240 - H_HEAD, T_BG);
     ui.head_sig = ~0u;
     cv_begin(DLG_W, DLG_H, T_BG);                     /* a SURF card: warning, the question, the detail, two buttons */
     if (UX_LINE)                                     /* LINE: no card, a 1 px rule round it */
