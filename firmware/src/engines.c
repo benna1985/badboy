@@ -21,7 +21,7 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #define ENG_MEM(p) ((void *)eng_mem[p].b)  /* part p's region (p < NPART) */
 #define ENG_MEM_FITS(name, size) _Static_assert((size) <= ENG_MEM_PART, name " state over ENG_MEM_PART")
 
-#include "../engines/src/eng_analog.c"   /* Felucca-Engines (MIT): ANALOG LOFI TRIO WHEEL NOISE */
+#include "eng_analog_x.c"   /* Felucca-Engines (MIT): ANALOG LOFI TRIO WHEEL NOISE; ANALOG with the synth bass copies (tools/gen_analog_bass.py: build/gen) */
 #include "eng_phase.c"
 #include "../engines/src/eng_lofi.c"
 #include "eng_sample.c"
