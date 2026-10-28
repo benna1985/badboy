@@ -93,13 +93,12 @@ def _phase(font_hi, ch, w, h, ox16, base, features, gamma):
     return best and best[1]
 
 
-DESC = "gjpqy,;()[]{}|/\\_@Q$"   # (pixel faces) glyphs that go below the baseline on purpose
 FIXED = "0123456789."       # one phase, at the rounded pen: src/ui_draw.c roll_text draws a number a character at
                             # a time (a sign leads the number: at pen 0 it is phase 0 either way)
 WHOLE = "0123456789."       # with tabular, their advance in whole pixels too: a number keeps an even pitch
 
 
-def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min=1, phases=1, pix=0):
+def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min=1, phases=1):
     """-> dict(h, asc, phases, glyphs{ch: (adv16, [(bx, by, bw, bh, bytes) per phase, or one])}, kern{(a,b): d16})
 
     Advances, kerning and the outlines come from the instanced weight at 16 x the size (unhinted): advances in
@@ -112,8 +111,6 @@ def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min
     tracking: extra advance per glyph in em (negative = tighter; the stand-in for "Inter Tight").
     tabular: digits share one advance (the widest, OpenType tnum), each centred in it, so values do not jiggle.
     kern_min: keep kerning pairs of at least this many 1/16 px.
-    pix: 1..15, a pixel face (the RETRO look): every glyph one phase, ink (15) where the coverage is at least pix / 15,
-    none elsewhere, every advance a whole number of pixels, no kerning.
     """
     assert phases in (1, 2, 4, 8)
     font = open_font(spec, px)                 # the line metrics only (ascent / descent rounded to pixels)
@@ -134,7 +131,7 @@ def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min
             for c in digits:
                 adv[c] = wide
         for c in chars:
-            if c in WHOLE or pix:
+            if c in WHOLE:
                 adv[c] = float(max(1, round(adv[c])))
     bot_max = 0
     for ch in chars:
@@ -144,10 +141,6 @@ def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min
         ph = []
         for p in range(1 if ch in FIXED else phases):
             nib = None if ch == " " else _phase(font_hi, ch, cw, chh, (pad + shift + p / phases) * SS, base, f, gamma)
-            if pix and nib:
-                nib = nib.point(lambda v: 15 if v >= pix else 0)
-                if ch not in DESC:                     # no overshoot under the baseline: a pixel face sits on its line
-                    nib.paste(0, (0, base, nib.width, nib.height))
             bb = nib and nib.getbbox()
             if not bb:
                 ph.append((0, 0, 0, 0, b""))
@@ -158,12 +151,6 @@ def raster_font(spec, px, chars, tracking=0.0, gamma=1.0, tabular=True, kern_min
         glyphs[ch] = (a16, ph)
     h = max(asc + desc, bot_max)
     kern = {}
-    if pix:                                    # a glyph's ink never reaches past its advance (right-aligned text stays inside)
-        need = {c: max([b[0] + b[2] for b in ph if b[2]] + [0]) * 16 for c, (a16, ph) in glyphs.items()}
-        dig = max([need[c] for c in glyphs if c.isdigit()] + [0])
-        for c, (a16, ph) in glyphs.items():
-            glyphs[c] = (max(a16, dig if c.isdigit() else need[c]), ph)
-        return {"h": h, "asc": asc, "glyphs": glyphs, "kern": kern, "px": px, "phases": phases}
     lens = {c: font_hi.getlength(c, features=feats) for c in chars if c != " "}
     for a in chars:
         for b in chars:

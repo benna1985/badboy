@@ -27,6 +27,11 @@ typedef struct { uint16_t off; uint8_t w; const char *label; } kc_t;
 #include "ui_fonts.h"                   /* AF_S 12 px / 400, AF_M 15 px / 500, AF_L 28 px / 600 */
 #undef AF_S
 #undef AF_M
+enum { AF_S_CAP_Y_STD = AF_S_CAP_Y, AF_S_CAP_H_STD = AF_S_CAP_H, AF_M_CAP_Y_STD = AF_M_CAP_Y, AF_M_CAP_H_STD = AF_M_CAP_H };
+#undef AF_S_CAP_Y
+#undef AF_S_CAP_H
+#undef AF_M_CAP_Y
+#undef AF_M_CAP_H
 #include "ui_fonts_px.h"                /* AP_S, AP_M: the same lines in a chunky bitmap face (RETRO: Inter Tight bold, no antialiasing, whole-pixel advances) */
 #include "ui_palettes.h"
 #include "ui_keycaps.h"                 /* KC_*: the keycaps / badges (tools/gen_aa_keycaps.py), KNOB_* arcs */
@@ -101,6 +106,10 @@ static struct {
 #define ST_RETRO 3u              /* RETRO (1.6): square corners and 3D bevels, an old computer's panels (2: the retired PIXEL) */
 #define AF_S (*(ux.style == ST_RETRO ? &AP_S : &AF_S_STD))   /* the face the style draws (RETRO: chunky) */
 #define AF_M (*(ux.style == ST_RETRO ? &AP_M : &AF_M_STD))
+#define AF_S_CAP_Y (ux.style == ST_RETRO ? AP_S_CAP_Y : AF_S_CAP_Y_STD)    /* the capitals' band of the face in use */
+#define AF_S_CAP_H (ux.style == ST_RETRO ? AP_S_CAP_H : AF_S_CAP_H_STD)
+#define AF_M_CAP_Y (ux.style == ST_RETRO ? AP_M_CAP_Y : AF_M_CAP_Y_STD)
+#define AF_M_CAP_H (ux.style == ST_RETRO ? AP_M_CAP_H : AF_M_CAP_H_STD)
 #define T_RULE ux.dim            /* LINE: the dividers (DIM: visible on NIGHT, GREY, MONO and PAPER, quieter than labels) */
 #define T_BG ux.bg               /* background */
 #define T_SURF ux.surf           /* dialogs, menu rows, mixer strips */
