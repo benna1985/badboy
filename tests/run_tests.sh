@@ -371,6 +371,9 @@ if [ -f build/gen/felucca_tables.h ]; then
     mkdir -p build/sound15_demo
     run "1.5 sound items: ANALOG filter TYPE LP / BP / HP (responses, LP and other engines bit for bit), ENV SYNC (times at several tempi), cost, demos" \
         "$OUT/sound15_test" build/sound15_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/subtract_test" tests/subtract_test.c -lm
+    run "SUBTRACT engine (1.6): two oscillators with their own waves and cents, SEMI, SUB, NOIS, pitch envelope, glide, filter" \
+        "$OUT/subtract_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/fold155_test" tests/fold155_test.c -lm
     mkdir -p build/fold155_demo
     run "PHASE FOLD (1.5.5): FOLD 0 bit for bit, bounded, no DC, brighter with FOLD, alias-aware gain, cost, demo" \

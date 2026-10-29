@@ -28,6 +28,7 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #include "eng_formant.c"
 #include "../engines/src/eng_trio.c"
 #include "../engines/src/eng_wheel.c"
+#include "eng_subtract.c"
 #include "eng_grain.c"
 #include "eng_phys.c"           /* PHYS: DaisySP physical models (phys_dsp.c, MIT) */
 #include "eng_drum.c"           /* DRUM: the 8-lane kit (drum_voice.c) */
@@ -61,8 +62,11 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_NOISE,                  /* 11 */
     &ENG_FM6,                    /* 12 (ENGI_FM6) */
 #if FELUCCA_SLICE
-    &ENG_SLICE,                  /* 13 (FELUCCA_SLICE=0 builds without it) */
+    &ENG_SLICE,                  /* 13 (FELUCCA_SLICE=0 builds without it: a reserved place) */
+#else
+    &ENG_FM4_GONE,
 #endif
+    &ENG_SUBTRACT,               /* 14 (ENGI_SUBTRACT) */
 };
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
@@ -114,6 +118,7 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     0,                           /* ANALOG */
     12,                          /* FM6 */
+    14,                          /* SUBTRACT */
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
 #endif

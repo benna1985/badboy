@@ -867,9 +867,11 @@ static uint16_t part_cost[NTRK];                        /* the last block's, per
 static const uint16_t ENG_VCOST[NENGINES] = {163, FELUCCA_FM4 ? 181 : 0, 162, 67, 70, 174, 144, 143, 189, 309, 113, 134,
                                              181,
 #if FELUCCA_SLICE
-                                             129
+                                             129,
+#else
+                                             0,
 #endif
-};
+                                             175};                    /* SUBTRACT: ANALOG's and a third oscillator, estimated */
 #endif
 
 /* one synth part into the dry mix and the sends of sm (mx[0]; mx[1] on the second core); a part with no voice sounding costs
