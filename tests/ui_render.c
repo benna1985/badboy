@@ -2308,7 +2308,7 @@ int main(int argc, char **argv)
         }
     {   /* STYLE LINE (gfx.c ST_*): every screen in every palette, linted (GREY: gray, MONO: neutral); GREY MONO NIGHT
          * PAPER as OUTDIR/ppm/<STYLE>_<PALETTE>_<screen>.ppm (ui_render.py: sheet_<STYLE>_<PALETTE>.png) */
-        static const char *const ST_N[4] = {"FLAT", "LINE", "LINE", "RETRO"}, *const ST_PAL[] = {"GREY", "MONO", "NIGHT", "PAPER", "C64", "AMIGA", "CGA", "GREEN"};
+        static const char *const ST_N[4] = {"FLAT", "LINE", "LINE", "RETRO"}, *const ST_PAL[] = {"GREY", "MONO", "NIGHT", "PAPER", "C64", "AMIGA", "CGA", "GREEN", "GAMEBOY"};
         uint32_t st, k, n0 = nfind, nruled = 0;
         for (st = ST_LINE; st <= ST_RETRO; st += ST_RETRO - ST_LINE)   /* LINE, RETRO */
             for (p = 0; p < NPALETTES; p++) {

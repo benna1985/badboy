@@ -54,6 +54,8 @@ PALETTES = [
     ("C64",    (24, 16, 88),    (44, 32, 124),   (232, 228, 255), (140, 200, 255), (255, 230, 100)),
     ("AMIGA",  (0, 28, 84),     (0, 54, 124),    (255, 255, 255), (255, 150, 30),  (130, 255, 160)),
     ("CGA",    (0, 0, 0),       (0, 0, 120),     (255, 255, 255), (80, 255, 255),  (255, 100, 255)),
+    # the original handheld's olive-green LCD, lightened and darkened to the contrast every palette keeps
+    ("GAMEBOY", (204, 228, 84),   (180, 208, 64),  (4, 22, 4),      (22, 66, 24),    (10, 78, 16)),
 ]
 BW = "MONO"
 BW_GREY = (82, 82, 82)             # MONO's one mid grey (RGB565 10/20/10): DIM LINE RAISE LANE
